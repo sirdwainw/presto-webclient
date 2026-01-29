@@ -1,14 +1,14 @@
-import { fetchJson } from "./fetch.js";
+import { apiFetch } from "./apiClient";
 
 export function postAssignments(body) {
-  return fetchJson("/api/assignments", {
+  return apiFetch("/api/assignments", {
     method: "POST",
     body: JSON.stringify(body),
   });
 }
 
 export function postAssignmentsByQuery(body) {
-  return fetchJson("/api/assignments/by-query", {
+  return apiFetch("/api/assignments/by-query", {
     method: "POST",
     body: JSON.stringify(body),
   });

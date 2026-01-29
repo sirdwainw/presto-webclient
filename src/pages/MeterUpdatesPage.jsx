@@ -1,16 +1,26 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { createMeterUpdateApi, listMeterUpdatesApi } from "../api/meters.api";
+import { deleteUpdateApi } from "../api/updates.api";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { LoadingBlock } from "../components/LoadingBlock";
 import { SuccessBanner } from "../components/SuccessBanner";
 import { JsonView } from "../components/JsonView";
 import { useAuth } from "../auth/AuthContext";
+import { getEntityId } from "../api/apiClient";
+
+function getCreatedById(update) {
+  if (!update || typeof update !== "object") return "";
+  if (typeof update.createdByUserId === "string") return update.createdByUserId;
+  if (typeof update.createdBy === "string") return update.createdBy;
+  return getEntityId(update.createdBy) || "";
+}
 
 export function MeterUpdatesPage() {
   const { id: meterId } = useParams();
   const { user } = useAuth();
   const role = user?.role;
+  const myUserId = getEntityId(user) || "";
   const nav = useNavigate();
 
   const [loadingList, setLoadingList] = useState(false);
@@ -31,12 +41,16 @@ export function MeterUpdatesPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   const [success, setSuccess] = useState("");
+  const [justSubmitted, setJustSubmitted] = useState(false);
+
+  const [deleteBusyId, setDeleteBusyId] = useState("");
+  const [deleteError, setDeleteError] = useState(null);
 
   async function loadUpdates() {
     setLoadingList(true);
     setListError(null);
     try {
-      const data = await listMeterUpdatesApi(meterId); // { meterId, updates: [...] }
+      const data = await listMeterUpdatesApi(meterId);
       setUpdatesPayload(data);
     } catch (e) {
       if (
@@ -60,31 +74,29 @@ export function MeterUpdatesPage() {
 
   async function onSubmit(e) {
     e.preventDefault();
+    setJustSubmitted(false);
     setSubmitError(null);
+    setDeleteError(null);
     setSuccess("");
     setSubmitting(true);
+
     try {
-      const body = {
-        latitude: Number(latitude),
-        longitude: Number(longitude),
-      };
+      const body = { latitude: Number(latitude), longitude: Number(longitude) };
       if (meterSize) body.meterSize = meterSize;
       if (locationNotes) body.locationNotes = locationNotes;
       if (photoUrl) body.photoUrl = photoUrl;
 
-      const result = await createMeterUpdateApi(meterId, body); // { update }
+      await createMeterUpdateApi(meterId, body);
       setSuccess("Update submitted.");
-      // Clear form
+      setJustSubmitted(true);
+
       setLatitude("");
       setLongitude("");
       setMeterSize("");
       setLocationNotes("");
       setPhotoUrl("");
-      // Refresh list
+
       await loadUpdates();
-      // Optionally show returned update
-      // result.update is not assumed; we show raw
-      console.log("create update result", result);
     } catch (e2) {
       if (
         e2?.status === 400 &&
@@ -98,6 +110,43 @@ export function MeterUpdatesPage() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  async function onDelete(updateObj) {
+    const id = getEntityId(updateObj);
+    if (!id) return;
+
+    setDeleteError(null);
+    setSuccess("");
+    setDeleteBusyId(id);
+
+    try {
+      await deleteUpdateApi(id);
+      setSuccess(`Update ${id} deleted.`);
+      await loadUpdates();
+    } catch (e) {
+      setDeleteError(e);
+    } finally {
+      setDeleteBusyId("");
+    }
+  }
+
+  function canDelete(updateObj) {
+    const id = getEntityId(updateObj);
+    if (!id) return false;
+
+    const status =
+      typeof updateObj?.status === "string" ? updateObj.status : "";
+    if (role === "admin" || role === "superadmin") return true;
+
+    if (role === "tech") {
+      const createdBy = getCreatedById(updateObj);
+      const isOwner = myUserId && createdBy && myUserId === createdBy;
+      const isSubmitted = status === "submitted";
+      return Boolean(isOwner && isSubmitted);
+    }
+
+    return false;
   }
 
   return (
@@ -131,9 +180,25 @@ export function MeterUpdatesPage() {
         </p>
 
         <SuccessBanner message={success} onDismiss={() => setSuccess("")} />
+
+        {role === "tech" && justSubmitted ? (
+          <div className="row" style={{ marginTop: 8 }}>
+            <Link
+              className="btn btn-primary"
+              to="/tech/updates?status=submitted"
+            >
+              View my updates
+            </Link>
+          </div>
+        ) : null}
+
         <ErrorBanner
           error={submitError}
           onDismiss={() => setSubmitError(null)}
+        />
+        <ErrorBanner
+          error={deleteError}
+          onDismiss={() => setDeleteError(null)}
         />
 
         <form onSubmit={onSubmit} className="grid grid-2">
@@ -206,28 +271,77 @@ export function MeterUpdatesPage() {
         <div className="row space-between">
           <div>
             <div className="h2">Updates List</div>
-            <div className="muted">
-              Raw list returned by backend (no assumed fields).
-            </div>
+            <div className="muted">Click an update to view details.</div>
           </div>
           <button className="btn" onClick={loadUpdates} disabled={loadingList}>
             {loadingList ? "Refreshing..." : "Refresh"}
           </button>
         </div>
 
-        <ErrorBanner error={listError} onDismiss={() => setListError(null)} />
         {loadingList ? <LoadingBlock title="Loading updates..." /> : null}
-        {!loadingList && updatesPayload ? (
-          <JsonView data={updatesPayload} />
+        <ErrorBanner error={listError} onDismiss={() => setListError(null)} />
+
+        {!loadingList && updates.length ? (
+          <div className="stack" style={{ marginTop: 12 }}>
+            {updates.map((u, idx) => {
+              const id = getEntityId(u);
+              const busy = id && deleteBusyId === id;
+              const status =
+                typeof u?.status === "string" ? u.status : "(unknown)";
+
+              return (
+                <div className="card card-subtle" key={id || idx}>
+                  <div className="row space-between">
+                    <div>
+                      <div className="h3">
+                        {id ? (
+                          <Link to={`/updates/${encodeURIComponent(id)}`}>
+                            Update <code>{id}</code>
+                          </Link>
+                        ) : (
+                          <span>
+                            Update <span className="muted">(no id field)</span>
+                          </span>
+                        )}
+                      </div>
+                      <div className="muted">Status: {status}</div>
+                    </div>
+
+                    <div className="row">
+                      {id ? (
+                        <Link
+                          className="btn"
+                          to={`/updates/${encodeURIComponent(id)}`}
+                        >
+                          Details
+                        </Link>
+                      ) : null}
+
+                      <button
+                        className="btn btn-danger"
+                        disabled={!id || busy || !canDelete(u)}
+                        onClick={() => onDelete(u)}
+                        title={
+                          canDelete(u)
+                            ? "Delete update"
+                            : "Delete allowed only for admin/superadmin, or tech-owned submitted updates"
+                        }
+                      >
+                        {busy ? "Deleting..." : "Delete"}
+                      </button>
+                    </div>
+                  </div>
+
+                  <details style={{ marginTop: 10 }}>
+                    <summary className="muted">Show raw JSON</summary>
+                    <JsonView data={u} />
+                  </details>
+                </div>
+              );
+            })}
+          </div>
         ) : null}
       </div>
-
-      {!loadingList && updates.length ? (
-        <div className="card">
-          <div className="h2">Updates (count)</div>
-          <div className="muted">{updates.length} update(s) in payload.</div>
-        </div>
-      ) : null}
     </div>
   );
 }

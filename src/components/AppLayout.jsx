@@ -54,9 +54,13 @@ export function AppLayout() {
             </NavItem>
             <NavItem to="/meters">Meters</NavItem>
             <NavItem to="/profile">Profile</NavItem>
+            <NavItem to="/settings">Settings</NavItem>
 
             {role === "tech" && (
-              <NavItem to="/tech/assignments">My Assignments</NavItem>
+              <>
+                <NavItem to="/tech/assignments">My Assignments</NavItem>
+                <NavItem to="/tech/updates">My Updates</NavItem>
+              </>
             )}
 
             {(role === "admin" || role === "superadmin") && (

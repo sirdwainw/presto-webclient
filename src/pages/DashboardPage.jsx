@@ -59,7 +59,7 @@ export function DashboardPage() {
         <div className="card">
           <div className="h2">Reports: Dashboard Snapshot</div>
           <p className="muted">
-            Data from <code>GET /api/reports/dashboard</code>
+            Data from <code>GET /api/dashboard/summary</code>
           </p>
 
           <ErrorBanner error={error} onDismiss={() => setError(null)} />

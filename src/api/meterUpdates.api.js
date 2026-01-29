@@ -1,13 +1,13 @@
-import { fetchJson } from "./fetch.js";
+import { apiFetch } from "./apiClient";
 
 export function getMeterUpdates(meterId) {
-  return fetchJson(`/api/meters/${encodeURIComponent(meterId)}/updates`, {
+  return apiFetch(`/api/meters/${encodeURIComponent(meterId)}/updates`, {
     method: "GET",
   });
 }
 
 export function postMeterUpdate(meterId, body) {
-  return fetchJson(`/api/meters/${encodeURIComponent(meterId)}/updates`, {
+  return apiFetch(`/api/meters/${encodeURIComponent(meterId)}/updates`, {
     method: "POST",
     body: JSON.stringify(body),
   });

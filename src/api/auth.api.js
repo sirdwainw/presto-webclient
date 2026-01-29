@@ -17,3 +17,14 @@ export function loginApi(body) {
 export function meApi() {
   return apiFetch("/api/auth/me", { method: "GET" });
 }
+
+// Backwards-compatible alias (your old Settings placeholder imported getMe)
+export const getMe = meApi;
+
+// NEW: persist active company + receive refreshed JWT
+export function setActiveCompanyApi(companyId) {
+  return apiFetch("/api/auth/set-active-company", {
+    method: "POST",
+    body: JSON.stringify({ companyId }),
+  });
+}

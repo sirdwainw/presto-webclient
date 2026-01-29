@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { listReviewUpdatesApi, reviewUpdateApi } from "../api/review.api";
+import { deleteUpdateApi } from "../api/updates.api";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { LoadingBlock } from "../components/LoadingBlock";
 import { Pagination } from "../components/Pagination";
@@ -59,8 +60,6 @@ export function ReviewUpdatesPage() {
     setSuccess("");
     const id = getEntityId(updateObj);
 
-    // Contract does not specify id field name inside update objects.
-    // We only enable buttons if we can read an id at runtime.
     if (!id) {
       setActionError({
         error:
@@ -88,6 +87,32 @@ export function ReviewUpdatesPage() {
       setActionLoadingId("");
     }
   }
+
+  async function doDelete(updateObj) {
+    setActionError(null);
+    setSuccess("");
+    const id = getEntityId(updateObj);
+
+    if (!id) {
+      setActionError({
+        error: "Cannot find update id field in this update object.",
+      });
+      return;
+    }
+
+    setActionLoadingId(id);
+    try {
+      await deleteUpdateApi(id);
+      setSuccess(`Update ${id} deleted.`);
+      await load();
+    } catch (e) {
+      setActionError(e);
+    } finally {
+      setActionLoadingId("");
+    }
+  }
+
+  const canDelete = role === "admin" || role === "superadmin";
 
   return (
     <div className="stack">
@@ -156,14 +181,14 @@ export function ReviewUpdatesPage() {
 
           <div className="h2">Updates</div>
           <p className="muted">
-            Buttons are only enabled if an id field exists at runtime (we do not
-            guess the id field name).
+            Buttons enabled only when an id field exists at runtime.
           </p>
 
           <div className="stack">
             {updates.map((u, idx) => {
               const id = getEntityId(u);
               const busy = id && actionLoadingId === id;
+
               return (
                 <div className="card card-subtle" key={id || idx}>
                   <div className="row space-between">
@@ -171,7 +196,9 @@ export function ReviewUpdatesPage() {
                       <div className="h3">
                         Update{" "}
                         {id ? (
-                          <code>{id}</code>
+                          <Link to={`/updates/${encodeURIComponent(id)}`}>
+                            <code>{id}</code>
+                          </Link>
                         ) : (
                           <span className="muted">(no id field)</span>
                         )}
@@ -193,6 +220,24 @@ export function ReviewUpdatesPage() {
                       >
                         {busy ? "Working..." : "Reject"}
                       </button>
+
+                      <button
+                        className="btn btn-danger"
+                        disabled={!id || busy || !canDelete}
+                        onClick={() => doDelete(u)}
+                        title={canDelete ? "Delete update" : "Admins only"}
+                      >
+                        {busy ? "Working..." : "Delete"}
+                      </button>
+
+                      {id ? (
+                        <Link
+                          className="btn"
+                          to={`/updates/${encodeURIComponent(id)}`}
+                        >
+                          Details
+                        </Link>
+                      ) : null}
                     </div>
                   </div>
 

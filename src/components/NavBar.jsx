@@ -59,6 +59,7 @@ export default function NavBar() {
           )}
 
           <NavLink to="/profile">Profile</NavLink>
+            <NavLink to="/settings">Settings</NavLink>
         </div>
 
         <div

@@ -9,6 +9,21 @@ import { getEntityId } from "../api/apiClient";
 
 const MISSING_OPTIONS = ["latlng", "notes", "photo", "meterSize", "any"];
 
+function windowMs(val) {
+  switch (val) {
+    case "1h":
+      return 1 * 60 * 60 * 1000;
+    case "24h":
+      return 24 * 60 * 60 * 1000;
+    case "7d":
+      return 7 * 24 * 60 * 60 * 1000;
+    case "30d":
+      return 30 * 24 * 60 * 60 * 1000;
+    default:
+      return 0; // off
+  }
+}
+
 export function MetersPage() {
   const { user } = useAuth();
   const role = user?.role;
@@ -19,11 +34,25 @@ export function MetersPage() {
   const [limit, setLimit] = useState(50);
   const [missing, setMissing] = useState("");
 
+  const [highlightWindow, setHighlightWindow] = useState("24h");
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [payload, setPayload] = useState(null);
 
   const meters = useMemo(() => payload?.meters || [], [payload]);
+
+  function isRecentApproved(meter) {
+    const ms = windowMs(highlightWindow);
+    if (!ms) return false;
+
+    const t = meter?.lastApprovedUpdateAt
+      ? new Date(meter.lastApprovedUpdateAt).getTime()
+      : 0;
+
+    if (!t || Number.isNaN(t)) return false;
+    return Date.now() - t <= ms;
+  }
 
   useEffect(() => {
     async function load() {
@@ -61,13 +90,13 @@ export function MetersPage() {
           <div>
             <div className="h1">Meters</div>
             <div className="muted">
-              Uses <code>GET /api/meters</code> with optional <code>q</code>,{" "}
-              <code>page</code>, <code>limit</code>, <code>missing</code>.
+              Uses <code>GET /api/meters</code>. Rows highlight based on{" "}
+              <code>meter.lastApprovedUpdateAt</code>.
             </div>
           </div>
         </div>
 
-        <div className="grid grid-4">
+        <div className="grid grid-5">
           <label className="field">
             <div className="field-label">Search (q)</div>
             <input
@@ -77,8 +106,7 @@ export function MetersPage() {
               disabled={loading}
             />
             <div className="field-hint">
-              Search across
-              electronicId/accountNumber/meterSerialNumber/customerName/address/route
+              electronicId/accountNumber/serial/customer/address/route
             </div>
           </label>
 
@@ -111,9 +139,24 @@ export function MetersPage() {
                 </option>
               ))}
             </select>
-            <div className="field-hint">
-              Backend may omit extra fields unless requested.
-            </div>
+            <div className="field-hint">Filter “missing data”</div>
+          </label>
+
+          <label className="field">
+            <div className="field-label">Highlight recently approved</div>
+            <select
+              className="input"
+              value={highlightWindow}
+              onChange={(e) => setHighlightWindow(e.target.value)}
+              disabled={loading}
+            >
+              <option value="off">off</option>
+              <option value="1h">last 1 hour</option>
+              <option value="24h">last 24 hours</option>
+              <option value="7d">last 7 days</option>
+              <option value="30d">last 30 days</option>
+            </select>
+            <div className="field-hint">Uses lastApprovedUpdateAt</div>
           </label>
 
           <div className="field">
@@ -131,7 +174,6 @@ export function MetersPage() {
       </div>
 
       <ErrorBanner error={error} onDismiss={() => setError(null)} />
-
       {loading ? <LoadingBlock title="Loading meters..." /> : null}
 
       {!loading && payload ? (
@@ -164,22 +206,26 @@ export function MetersPage() {
               <tbody>
                 {meters.map((m, idx) => {
                   const id = getEntityId(m) || String(idx);
+                  const mid = getEntityId(m);
+
                   return (
-                    <tr key={id}>
+                    <tr
+                      key={id}
+                      className={isRecentApproved(m) ? "row-recent" : ""}
+                    >
                       <td>
-                        {getEntityId(m) ? (
-                          <Link
-                            to={`/meters/${encodeURIComponent(getEntityId(m))}`}
-                          >
-                            {getEntityId(m)}
+                        {mid ? (
+                          <Link to={`/meters/${encodeURIComponent(mid)}`}>
+                            {mid}
                           </Link>
                         ) : (
                           <span className="muted">(no id field)</span>
                         )}
-                        {getEntityId(m) ? (
+
+                        {mid ? (
                           <div className="muted">
                             <Link
-                              to={`/meters/${encodeURIComponent(getEntityId(m))}/updates`}
+                              to={`/meters/${encodeURIComponent(mid)}/updates`}
                             >
                               updates
                             </Link>

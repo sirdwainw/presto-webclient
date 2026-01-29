@@ -1,9 +1,9 @@
 import React from "react";
-import { Navigate, useLocation } from "react-router-dom";
+import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "./AuthContext";
 import { LoadingBlock } from "../components/LoadingBlock";
 
-export function ProtectedRoute({ children }) {
+export function ProtectedRoute() {
   const { isAuthed, isInitializing } = useAuth();
   const loc = useLocation();
 
@@ -12,5 +12,7 @@ export function ProtectedRoute({ children }) {
   if (!isAuthed) {
     return <Navigate to="/login" replace state={{ from: loc.pathname }} />;
   }
-  return children;
+
+  // If authed, render the nested routes
+  return <Outlet />;
 }
