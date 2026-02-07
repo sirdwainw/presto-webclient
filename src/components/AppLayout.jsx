@@ -65,6 +65,7 @@ export function AppLayout() {
 
             {(role === "admin" || role === "superadmin") && (
               <>
+                <NavItem to="/assignments">Assignments</NavItem>
                 <NavItem to="/review/updates">Review Queue</NavItem>
                 <NavItem to="/reports">Reports</NavItem>
               </>

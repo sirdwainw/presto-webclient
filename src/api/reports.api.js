@@ -1,7 +1,7 @@
 import { apiFetch } from "./apiClient";
 
 export function reportsDashboardApi() {
-  return apiFetch("/api/reports/dashboard", { method: "GET" });
+  return apiFetch("/api/dashboard/summary", { method: "GET" });
 }
 
 export function reportsDataQualityApi() {
@@ -26,4 +26,13 @@ export function reportsActivityApi(params) {
   if (params?.start) qs.set("start", String(params.start));
   if (params?.end) qs.set("end", String(params.end));
   return apiFetch(`/api/reports/activity?${qs.toString()}`, { method: "GET" });
+}
+
+export function techWorkloadApi() {
+  return apiFetch("/api/reports/tech-workload", { method: "GET" });
+}
+
+export function techSummaryApi(userId) {
+  const qs = userId ? `?userId=${encodeURIComponent(userId)}` : "";
+  return apiFetch(`/api/dashboard/tech-summary${qs}`, { method: "GET" });
 }

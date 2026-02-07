@@ -1,0 +1,85 @@
+/* Makes the Meters table feel like a real ops table */
+.meters-toolbar {
+  display: grid;
+  gap: 12px;
+}
+
+.meters-filters {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 1200px) {
+  .meters-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.meters-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.meters-meta {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  font-size: 12px;
+}
+
+.meters-meta code {
+  font-size: 12px;
+}
+
+.meters-table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: rgba(10, 18, 35, 0.95);
+  backdrop-filter: blur(6px);
+}
+
+.meters-table tr:nth-child(even) td {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.meters-table td {
+  vertical-align: top;
+}
+
+.cell-wrap {
+  max-width: 320px;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.meter-primary {
+  font-weight: 800;
+}
+
+.meter-sub {
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+.meter-sub a {
+  text-decoration: underline;
+}
+
+.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.sortable:hover {
+  text-decoration: underline;
+}
+
+.row-recent td {
+  /* “recently approved” highlight */
+  background: rgba(30, 140, 90, 0.18) !important;
+}
