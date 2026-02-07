@@ -1,41 +1,55 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { listTechAssignmentsApi } from "../api/tech.api";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { LoadingBlock } from "../components/LoadingBlock";
-import { Pagination } from "../components/Pagination";
-import { JsonView } from "../components/JsonView";
 import { useAuth } from "../auth/AuthContext";
+import { getEntityId } from "../api/apiClient";
+
+function isCompanyScopeError(e) {
+  const msg = String(e?.error || e?.message || "");
+  return e?.status === 400 && msg.startsWith("No company scope selected");
+}
 
 export function TechAssignmentsPage() {
   const { user } = useAuth();
   const role = user?.role;
   const nav = useNavigate();
 
-  const [active, setActive] = useState(true);
-  const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(100);
-
+  const [q, setQ] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [payload, setPayload] = useState(null);
 
-  const assignments = useMemo(() => payload?.assignments || [], [payload]);
+  const meters = useMemo(() => payload?.meters || [], [payload]);
+
+  const filtered = useMemo(() => {
+    const term = q.trim().toLowerCase();
+    if (!term) return meters;
+
+    return meters.filter((m) => {
+      const hay = [
+        m?.electronicId,
+        m?.accountNumber,
+        m?.customerName,
+        m?.address,
+        m?.route,
+      ]
+        .map((x) => String(x || "").toLowerCase())
+        .join(" | ");
+      return hay.includes(term);
+    });
+  }, [meters, q]);
 
   useEffect(() => {
     async function load() {
       setLoading(true);
       setError(null);
       try {
-        const data = await listTechAssignmentsApi({ active, page, limit });
+        const data = await listTechAssignmentsApi();
         setPayload(data);
       } catch (e) {
-        // Tech-specific error per contract: 400 { error: "No company scope for tech user" }
-        if (
-          e?.status === 400 &&
-          e?.error === "No company scope selected" &&
-          role === "superadmin"
-        ) {
+        if (isCompanyScopeError(e) && role === "superadmin") {
           nav("/superadmin/context");
           return;
         }
@@ -45,7 +59,7 @@ export function TechAssignmentsPage() {
       }
     }
     load();
-  }, [active, page, limit, role, nav]);
+  }, [role, nav]);
 
   return (
     <div className="stack">
@@ -57,40 +71,31 @@ export function TechAssignmentsPage() {
 
         <div className="grid grid-3" style={{ marginTop: 12 }}>
           <label className="field">
-            <div className="field-label">Active</div>
-            <select
-              className="input"
-              value={String(active)}
-              onChange={(e) => setActive(e.target.value === "true")}
-              disabled={loading}
-            >
-              <option value="true">true</option>
-              <option value="false">false</option>
-            </select>
-          </label>
-
-          <label className="field">
-            <div className="field-label">Limit</div>
+            <div className="field-label">Search</div>
             <input
               className="input"
-              type="number"
-              min={1}
-              max={500}
-              value={limit}
-              onChange={(e) => setLimit(Number(e.target.value))}
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
               disabled={loading}
+              placeholder="eid / account / customer / address / route"
             />
-            <div className="field-hint">Default 100, max 500</div>
           </label>
+
+          <div className="field">
+            <div className="field-label">Counts</div>
+            <div className="muted">
+              Showing {filtered.length} of {meters.length}
+            </div>
+          </div>
 
           <div className="field">
             <div className="field-label">Actions</div>
             <button
               className="btn"
-              onClick={() => setPage(1)}
+              onClick={() => window.location.reload()}
               disabled={loading}
             >
-              Apply (page 1)
+              Refresh
             </button>
           </div>
         </div>
@@ -101,16 +106,49 @@ export function TechAssignmentsPage() {
 
       {!loading && payload ? (
         <div className="card">
-          <Pagination
-            page={payload.page || page}
-            limit={payload.limit || limit}
-            count={payload.count || 0}
-            onPageChange={setPage}
-          />
-          <div className="h2">Raw payload</div>
-          <JsonView data={payload} />
-          <div className="muted">
-            {assignments.length} assignment(s) in payload.
+          <div className="table-wrap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Meter</th>
+                  <th>Electronic ID</th>
+                  <th>Account #</th>
+                  <th>Customer</th>
+                  <th>Address</th>
+                  <th>Route</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((m, idx) => {
+                  const mid = getEntityId(m) || String(idx);
+                  return (
+                    <tr key={mid}>
+                      <td>
+                        <Link to={`/meters/${encodeURIComponent(mid)}`}>
+                          {mid}
+                        </Link>
+                        <div className="muted">
+                          <Link
+                            to={`/meters/${encodeURIComponent(mid)}/updates`}
+                          >
+                            updates
+                          </Link>
+                        </div>
+                      </td>
+                      <td>{m?.electronicId ?? ""}</td>
+                      <td>{m?.accountNumber ?? ""}</td>
+                      <td>{m?.customerName ?? ""}</td>
+                      <td>{m?.address ?? ""}</td>
+                      <td>{m?.route ?? ""}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="muted" style={{ marginTop: 10 }}>
+            {payload?.count ?? meters.length} meter(s) returned.
           </div>
         </div>
       ) : null}

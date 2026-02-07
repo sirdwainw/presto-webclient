@@ -168,7 +168,6 @@ code {
   .grid-5 { grid-template-columns: 1fr; }
 }
 
-
 .input {
   width: 100%;
   border: 1px solid var(--border);
@@ -265,4 +264,30 @@ code {
   border-color: rgba(34, 197, 94, 0.35);
   background: rgba(34, 197, 94, 0.12);
   color: rgba(231, 236, 255, 0.95);
+}
+
+/* ---------- NEW: Meters assignment toolbar + selection styles ---------- */
+.table-toolbar{
+  display:flex;
+  align-items:center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0 14px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.toolbar-group{
+  display:flex;
+  align-items:center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.th-sort{
+  cursor: pointer;
+  user-select: none;
+}
+.row-selected{
+  background: rgba(59,130,246,0.10);
+  outline: 1px solid rgba(59,130,246,0.22);
 }

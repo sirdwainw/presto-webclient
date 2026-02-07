@@ -4,34 +4,58 @@ import { getUpdateApi, deleteUpdateApi } from "../api/updates.api";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { LoadingBlock } from "../components/LoadingBlock";
 import { SuccessBanner } from "../components/SuccessBanner";
-import { JsonView } from "../components/JsonView";
 import { useAuth } from "../auth/AuthContext";
 import { getEntityId } from "../api/apiClient";
+import { MeterLabel } from "../components/MeterLabel";
 
-function getCreatedById(update) {
-  if (!update || typeof update !== "object") return "";
-  if (typeof update.createdByUserId === "string") return update.createdByUserId;
-  if (typeof update.createdByUserId === "number")
-    return String(update.createdByUserId);
+function fmt(dt) {
+  if (!dt) return "";
+  const d = new Date(dt);
+  if (Number.isNaN(d.getTime())) return String(dt);
+  return d.toLocaleString();
+}
 
-  if (typeof update.createdBy === "string") return update.createdBy;
-  const createdByObjId = getEntityId(update.createdBy);
-  if (createdByObjId) return createdByObjId;
+function safe(v) {
+  if (v === null || v === undefined) return "";
+  if (typeof v === "string") return v;
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
+  try {
+    return JSON.stringify(v);
+  } catch {
+    return String(v);
+  }
+}
 
-  if (typeof update.userId === "string") return update.userId;
-  const userObjId = getEntityId(update.user);
-  if (userObjId) return userObjId;
+function createdByDisplay(update) {
+  // If backend enriched createdBy
+  const cb = update?.createdBy;
+  if (cb?.name && cb?.email) return `${cb.name} (${cb.email})`;
+  if (cb?.name) return cb.name;
+  if (cb?.email) return cb.email;
 
-  return "";
+  // Fallback
+  if (typeof update?.createdByUserId === "string")
+    return update.createdByUserId;
+  return getEntityId(update?.createdByUserId) || "(unknown)";
+}
+
+function getMeterIdFromUpdate(update) {
+  // Prefer populated meter object
+  const midFromMeter = getEntityId(update?.meter);
+  if (midFromMeter) return midFromMeter;
+
+  // Fallback to meterId field
+  if (typeof update?.meterId === "string") return update.meterId;
+  return getEntityId(update?.meterId) || "";
 }
 
 export function UpdateDetailPage() {
-  const { id } = useParams(); // updateId
+  const { id } = useParams(); // update id
   const nav = useNavigate();
   const { user } = useAuth();
-
   const role = user?.role;
-  const myUserId = getEntityId(user) || "";
+
+  const isSuperadmin = role === "superadmin";
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -44,32 +68,24 @@ export function UpdateDetailPage() {
   const update = useMemo(() => payload?.update || null, [payload]);
   const updateId = useMemo(() => getEntityId(update) || id, [update, id]);
 
-  const meterId = useMemo(() => {
-    if (!update) return "";
-    if (typeof update.meterId === "string") return update.meterId;
-    return getEntityId(update.meterId) || "";
-  }, [update]);
+  const meterId = useMemo(() => getMeterIdFromUpdate(update), [update]);
+  const meter = useMemo(() => update?.meter || null, [update]);
 
   const status = useMemo(() => {
     const s = update?.status;
-    return typeof s === "string" ? s : "";
+    return typeof s === "string" ? s : "(unknown)";
   }, [update]);
-
-  const createdById = useMemo(() => getCreatedById(update), [update]);
 
   const canDelete = useMemo(() => {
     if (!update) return false;
 
+    // Admin/superadmin can delete any update
     if (role === "admin" || role === "superadmin") return true;
 
-    if (role === "tech") {
-      const isOwner = myUserId && createdById && myUserId === createdById;
-      const isSubmitted = status === "submitted";
-      return Boolean(isOwner && isSubmitted);
-    }
-
+    // Tech can delete only submitted updates (as before)
+    if (role === "tech") return status === "submitted";
     return false;
-  }, [role, myUserId, createdById, status, update]);
+  }, [role, status, update]);
 
   async function load() {
     setLoading(true);
@@ -97,7 +113,8 @@ export function UpdateDetailPage() {
     try {
       await deleteUpdateApi(updateId);
       setSuccess("Update deleted.");
-      // Go somewhere sensible
+
+      // Navigate somewhere sensible after delete
       if (role === "admin" || role === "superadmin") nav("/review/updates");
       else if (meterId) nav(`/meters/${encodeURIComponent(meterId)}/updates`);
       else nav("/dashboard");
@@ -108,6 +125,21 @@ export function UpdateDetailPage() {
     }
   }
 
+  // Internal fields shown ONLY to superadmin
+  const internalFields = useMemo(() => {
+    if (!update) return [];
+
+    return [
+      { label: "System Update ID", value: safe(updateId) },
+      { label: "Company ID", value: safe(update?.companyId) },
+      {
+        label: "Meter ID",
+        value: safe(getEntityId(update?.meter) || update?.meterId),
+      },
+      { label: "Created By (raw)", value: safe(update?.createdByUserId) },
+    ].filter((f) => f.value !== "");
+  }, [update, updateId]);
+
   return (
     <div className="stack">
       <div className="card">
@@ -115,25 +147,32 @@ export function UpdateDetailPage() {
           <div>
             <div className="h1">Update Details</div>
             <div className="muted">
-              Uses <code>GET /api/updates/:id</code> and{" "}
-              <code>DELETE /api/updates/:id</code>
+              Clean summary. Internal fields only appear for superadmin.
             </div>
           </div>
+
           <div className="row">
             <button className="btn" onClick={() => nav(-1)}>
               Back
             </button>
+
+            {meterId ? (
+              <Link
+                className="btn"
+                to={`/meters/${encodeURIComponent(meterId)}`}
+              >
+                Meter
+              </Link>
+            ) : null}
+
             {meterId ? (
               <Link
                 className="btn"
                 to={`/meters/${encodeURIComponent(meterId)}/updates`}
               >
-                Meter Updates
+                Updates / History
               </Link>
             ) : null}
-            <Link className="btn" to="/dashboard">
-              Dashboard
-            </Link>
           </div>
         </div>
       </div>
@@ -148,26 +187,39 @@ export function UpdateDetailPage() {
         <>
           <div className="card">
             <div className="h2">Summary</div>
-            <div className="grid grid-2">
-              <div>
-                <div className="muted">Update ID</div>
-                <code>{updateId}</code>
-              </div>
+
+            <div className="grid grid-2" style={{ marginTop: 12 }}>
               <div>
                 <div className="muted">Status</div>
-                <div>{status || "(unknown)"}</div>
+                <div>{status}</div>
               </div>
+
+              <div>
+                <div className="muted">Created At</div>
+                <div>{fmt(update?.createdAt)}</div>
+              </div>
+
+              <div>
+                <div className="muted">Submitted By</div>
+                <div>{createdByDisplay(update)}</div>
+              </div>
+
               <div>
                 <div className="muted">Meter</div>
-                {meterId ? (
-                  <code>{meterId}</code>
+                {meterId || meter ? (
+                  <MeterLabel
+                    meter={meter}
+                    meterId={meterId}
+                    to={
+                      meterId
+                        ? `/meters/${encodeURIComponent(meterId)}`
+                        : undefined
+                    }
+                    showSystemId={false}
+                  />
                 ) : (
                   <span className="muted">(none)</span>
                 )}
-              </div>
-              <div>
-                <div className="muted">Created By</div>
-                <div>{createdById || "(unknown)"}</div>
               </div>
             </div>
 
@@ -180,28 +232,31 @@ export function UpdateDetailPage() {
                 className="btn btn-danger"
                 onClick={onDelete}
                 disabled={!canDelete || deleting}
-                title={
-                  canDelete
-                    ? "Delete this update"
-                    : "Delete allowed only for admin/superadmin, or tech-owned submitted updates"
-                }
+                title={canDelete ? "Delete this update" : "Not allowed"}
               >
                 {deleting ? "Deleting..." : "Delete"}
               </button>
-
-              {!canDelete ? (
-                <span className="muted" style={{ alignSelf: "center" }}>
-                  Delete rule: tech can delete only their own{" "}
-                  <code>submitted</code> updates.
-                </span>
-              ) : null}
             </div>
           </div>
 
-          <div className="card">
-            <div className="h2">Raw Update Object</div>
-            <JsonView data={update} />
-          </div>
+          {/* ✅ Internal fields section only for superadmin */}
+          {isSuperadmin && internalFields.length ? (
+            <div className="card">
+              <div className="h2">Internal</div>
+              <div className="muted" style={{ marginTop: 6 }}>
+                Visible only to superadmin (support/debug).
+              </div>
+
+              <div className="grid grid-3" style={{ marginTop: 12 }}>
+                {internalFields.map((f) => (
+                  <div key={f.label}>
+                    <div className="muted">{f.label}</div>
+                    <div className="mono">{f.value}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </>
       ) : null}
     </div>

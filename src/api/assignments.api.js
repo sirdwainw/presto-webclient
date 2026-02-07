@@ -1,5 +1,9 @@
 import { apiFetch } from "./apiClient";
 
+export function listAssignableTechsApi() {
+  return apiFetch("/api/assignments/techs", { method: "GET" });
+}
+
 export function postAssignments(body) {
   return apiFetch("/api/assignments", {
     method: "POST",

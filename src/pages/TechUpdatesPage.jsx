@@ -8,6 +8,7 @@ import { SuccessBanner } from "../components/SuccessBanner";
 import { Pagination } from "../components/Pagination";
 import { JsonView } from "../components/JsonView";
 import { getEntityId } from "../api/apiClient";
+import { MeterLabel } from "../components/MeterLabel";
 
 function fmt(dt) {
   if (!dt) return "";
@@ -16,10 +17,18 @@ function fmt(dt) {
   return d.toLocaleString();
 }
 
+function getMeterIdFromUpdate(u) {
+  const midFromMeter = getEntityId(u?.meter);
+  if (midFromMeter) return midFromMeter;
+
+  if (typeof u?.meterId === "string") return u.meterId;
+  return getEntityId(u?.meterId) || "";
+}
+
 export function TechUpdatesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const statusParam = searchParams.get("status") || "submitted"; // default
+  const statusParam = searchParams.get("status") || "submitted";
   const page = Math.max(Number(searchParams.get("page") || 1), 1);
   const limit = Math.min(
     Math.max(Number(searchParams.get("limit") || 50), 1),
@@ -40,12 +49,10 @@ export function TechUpdatesPage() {
 
   function patchParams(next) {
     const sp = new URLSearchParams(searchParams);
-
     Object.entries(next).forEach(([k, v]) => {
       if (v === undefined || v === null || v === "") sp.delete(k);
       else sp.set(k, String(v));
     });
-
     setSearchParams(sp);
   }
 
@@ -80,7 +87,7 @@ export function TechUpdatesPage() {
     setBusyId(id);
     try {
       await deleteUpdateApi(id);
-      setSuccess(`Update ${id} deleted.`);
+      setSuccess("Update deleted.");
       await load();
     } catch (e) {
       setActionError(e);
@@ -100,8 +107,7 @@ export function TechUpdatesPage() {
           <div>
             <div className="h1">My Updates</div>
             <div className="muted">
-              Uses <code>GET /api/tech/updates</code> (your
-              submitted/approved/rejected updates).
+              Your submitted / approved / rejected updates.
             </div>
           </div>
           <Link className="btn" to="/dashboard">
@@ -184,69 +190,48 @@ export function TechUpdatesPage() {
 
           <div className="stack" style={{ marginTop: 12 }}>
             {updates.map((u, idx) => {
-              const id = getEntityId(u);
-              const busy = id && busyId === id;
+              const updateId = getEntityId(u);
+              const busy = updateId && busyId === updateId;
 
-              const meterId =
-                typeof u?.meterId === "string"
-                  ? u.meterId
-                  : getEntityId(u?.meterId);
+              const meterId = getMeterIdFromUpdate(u);
+              const meter = u?.meter || null;
 
-              const appliedAt = u?.appliedAt;
-              const reviewedAt = u?.reviewedAt;
+              const title = `${String(u?.status || "update")} • ${fmt(u?.createdAt)}`;
 
               return (
-                <div className="card card-subtle" key={id || idx}>
+                <div className="card card-subtle" key={updateId || idx}>
                   <div className="row space-between">
                     <div>
-                      <div className="h3">
-                        {id ? (
-                          <Link to={`/updates/${encodeURIComponent(id)}`}>
-                            Update <code>{id}</code>
-                          </Link>
-                        ) : (
-                          "Update"
-                        )}
+                      <div className="h3">{title}</div>
+
+                      <div style={{ marginTop: 8 }}>
+                        <MeterLabel
+                          meter={meter}
+                          meterId={meterId}
+                          to={
+                            meterId
+                              ? `/meters/${encodeURIComponent(meterId)}`
+                              : undefined
+                          }
+                          showSystemId={false}
+                        />
                       </div>
 
-                      <div
-                        className="muted"
-                        style={{ display: "flex", gap: 10, flexWrap: "wrap" }}
-                      >
-                        <span>
-                          Status:{" "}
-                          <strong>{String(u?.status || "(unknown)")}</strong>
-                        </span>
-
-                        {appliedAt ? (
-                          <span className="pill pill-success">applied</span>
-                        ) : null}
-
-                        {meterId ? (
-                          <span>
-                            Meter{" "}
-                            <Link
-                              to={`/meters/${encodeURIComponent(meterId)}/updates`}
-                            >
-                              <code>{meterId}</code>
-                            </Link>
-                          </span>
-                        ) : null}
-
-                        {reviewedAt ? (
-                          <span>Reviewed: {fmt(reviewedAt)}</span>
-                        ) : null}
-                        {appliedAt ? (
-                          <span>Applied: {fmt(appliedAt)}</span>
-                        ) : null}
-                      </div>
+                      {updateId ? (
+                        <div
+                          className="muted"
+                          style={{ marginTop: 6, fontSize: 12 }}
+                        >
+                          System Update ID: <code>{updateId}</code>
+                        </div>
+                      ) : null}
                     </div>
 
-                    <div className="row">
-                      {id ? (
+                    <div className="row" style={{ alignItems: "flex-start" }}>
+                      {updateId ? (
                         <Link
                           className="btn"
-                          to={`/updates/${encodeURIComponent(id)}`}
+                          to={`/updates/${encodeURIComponent(updateId)}`}
                         >
                           Details
                         </Link>
@@ -255,15 +240,15 @@ export function TechUpdatesPage() {
                       {meterId ? (
                         <Link
                           className="btn"
-                          to={`/meters/${encodeURIComponent(meterId)}`}
+                          to={`/meters/${encodeURIComponent(meterId)}/updates`}
                         >
-                          Meter
+                          Meter Updates
                         </Link>
                       ) : null}
 
                       <button
                         className="btn btn-danger"
-                        disabled={!id || busy || !canDelete(u)}
+                        disabled={!updateId || busy || !canDelete(u)}
                         onClick={() => doDelete(u)}
                         title={
                           canDelete(u)
@@ -277,7 +262,7 @@ export function TechUpdatesPage() {
                   </div>
 
                   <details style={{ marginTop: 10 }}>
-                    <summary className="muted">Show raw JSON</summary>
+                    <summary className="muted">Show raw JSON (debug)</summary>
                     <JsonView data={u} />
                   </details>
                 </div>
