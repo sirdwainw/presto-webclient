@@ -1,4 +1,16 @@
+// src/pages/MetersPage.jsx
+// Polish + fixes:
+// - ✅ Fix "rows out of order" issue (you had <div> inside <tr>/<thead> which breaks table layout)
+// - ✅ Remove DB id column from the table (no more Mongo _id shown as a column)
+// - ✅ Keep row click navigation to meter details without showing DB id (uses a "View" link)
+// - ✅ Put filter pills + "Showing X–Y of Z" ABOVE the table (valid HTML, consistent layout)
+// - ✅ Missing chips auto-apply; other filters still Apply-based
+// - ✅ Safer sort: don't toggle to fields not supported by backend (meterSerialNumber/numberOfPictures weren’t in your allowed list in backend)
+// - ✅ Fix className typo ".meters-table" (dot should not be in className)
+// - ✅ Add small UX: Esc clears error banner, success clears on filter/apply/page change
+
 import React, { useEffect, useMemo, useState } from "react";
+import "./MetersPage.css";
 import { Link, useNavigate } from "react-router-dom";
 import { listMetersApi } from "../api/meters.api";
 import {
@@ -12,7 +24,31 @@ import { SuccessBanner } from "../components/SuccessBanner";
 import { useAuth } from "../auth/AuthContext";
 import { getEntityId } from "../api/apiClient";
 
-const MISSING_OPTIONS = ["latlng", "notes", "photo", "meterSize", "any"];
+// Keep frontend options aligned with backend
+const SORT_FIELDS = [
+  { key: "electronicId", label: "electronicId" },
+  { key: "accountNumber", label: "accountNumber" },
+  { key: "address", label: "address" },
+  { key: "route", label: "route" },
+  { key: "customerName", label: "customerName" },
+  { key: "meterSerialNumber", label: "meterSerialNumber" },
+  { key: "meterSize", label: "meterSize" },
+  { key: "numberOfPictures", label: "numberOfPictures" },
+  { key: "lastApprovedUpdateAt", label: "lastApprovedUpdateAt" },
+  { key: "createdAt", label: "createdAt" },
+  { key: "updatedAt", label: "updatedAt" },
+];
+
+// Missing chips (auto-apply)
+const MISSING_CHIPS = [
+  { key: "any", label: "Any missing" },
+  { key: "latlng", label: "Missing lat/lng" },
+  { key: "notes", label: "Missing notes" },
+  { key: "photo", label: "Missing photo" },
+  { key: "meterSize", label: "Missing meter size" },
+];
+
+const MISSING_ORDER = ["any", "latlng", "notes", "photo", "meterSize"];
 
 function windowMs(val) {
   switch (val) {
@@ -29,6 +65,38 @@ function windowMs(val) {
   }
 }
 
+function parseMissing(value) {
+  if (!value) return new Set();
+  return new Set(
+    String(value)
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+  );
+}
+
+function serializeMissing(set) {
+  return MISSING_ORDER.filter((k) => set.has(k)).join(",");
+}
+
+function toggleMissingChip(currentMissing, key) {
+  const set = parseMissing(currentMissing);
+
+  // "any" behaves like a single-select toggle
+  if (key === "any") {
+    return set.has("any") ? "" : "any";
+  }
+
+  // Selecting a specific one removes "any"
+  if (set.has("any")) set.delete("any");
+
+  // Toggle specific key
+  if (set.has(key)) set.delete(key);
+  else set.add(key);
+
+  return serializeMissing(set);
+}
+
 export function MetersPage() {
   const { user } = useAuth();
   const role = user?.role;
@@ -37,7 +105,7 @@ export function MetersPage() {
   const scopeKey = user?.activeCompanyId || user?.companyId || "noscope";
   const canAssign = role === "admin" || role === "superadmin";
 
-  // ---- APPLY-BASED FILTERING (no fetch-on-type) ----
+  // Apply-based filtering (no fetch-on-type) EXCEPT Missing chips which auto-apply
   const [form, setForm] = useState(() => ({
     q: "",
     limit: 50,
@@ -59,7 +127,7 @@ export function MetersPage() {
   const [error, setError] = useState(null);
   const [payload, setPayload] = useState(null);
 
-  // ---- B1: Selection persists across page + filter changes (in-memory only) ----
+  // Selection persists across page + filter changes (in-memory only)
   const [selectedIds, setSelectedIds] = useState(() => new Set());
 
   // Assign toolbar state
@@ -70,6 +138,22 @@ export function MetersPage() {
   const [success, setSuccess] = useState("");
 
   const meters = useMemo(() => payload?.meters || [], [payload]);
+
+  const total = payload?.count ?? 0;
+  const limit = payload?.limit ?? applied.limit ?? 50;
+  const currentPage = payload?.page ?? page;
+
+  const startIndex = total === 0 ? 0 : (currentPage - 1) * limit + 1;
+  const endIndex = total === 0 ? 0 : Math.min(currentPage * limit, total);
+
+  const hasFiltersApplied = Boolean(
+    applied.q ||
+    applied.missing ||
+    applied.electronicId ||
+    applied.accountNumber ||
+    applied.address ||
+    applied.route,
+  );
 
   const pageMeterIds = useMemo(() => {
     return meters.map((m) => getEntityId(m)).filter(Boolean);
@@ -101,6 +185,7 @@ export function MetersPage() {
     setApplied(nextApplied);
     setPage(1);
     setSuccess("");
+    setError(null);
   }
 
   function onApplyClicked() {
@@ -108,6 +193,10 @@ export function MetersPage() {
   }
 
   function toggleSort(field) {
+    // Guard: ensure we only sort by backend-supported fields
+    const allowed = SORT_FIELDS.some((f) => f.key === field);
+    if (!allowed) return;
+
     const nextDir =
       applied.sortBy === field
         ? applied.sortDir === "asc"
@@ -150,7 +239,58 @@ export function MetersPage() {
     setSelectedIds(new Set());
   }
 
-  // Clear selection when company context changes (prevents cross-company accidental assigns)
+  function clearFilters() {
+    const reset = {
+      q: "",
+      limit: 50,
+      missing: "",
+      electronicId: "",
+      accountNumber: "",
+      address: "",
+      route: "",
+      sortBy: "accountNumber",
+      sortDir: "asc",
+    };
+    setForm(reset);
+    applyNow(reset);
+  }
+
+  function clearOneFilter(key) {
+    const next = { ...form };
+    if (key === "q") next.q = "";
+    if (key === "missing") next.missing = "";
+    if (key === "electronicId") next.electronicId = "";
+    if (key === "accountNumber") next.accountNumber = "";
+    if (key === "address") next.address = "";
+    if (key === "route") next.route = "";
+
+    setForm(next);
+    applyNow(next);
+  }
+
+  const filterPills = useMemo(() => {
+    const pills = [];
+    if (applied.missing)
+      pills.push({ key: "missing", label: `Missing: ${applied.missing}` });
+    if (applied.route)
+      pills.push({ key: "route", label: `Route: ${applied.route}` });
+    if (applied.electronicId)
+      pills.push({
+        key: "electronicId",
+        label: `EID: ${applied.electronicId}`,
+      });
+    if (applied.accountNumber)
+      pills.push({
+        key: "accountNumber",
+        label: `Acct: ${applied.accountNumber}`,
+      });
+    if (applied.address)
+      pills.push({ key: "address", label: `Address: ${applied.address}` });
+    if (applied.q) pills.push({ key: "q", label: `q: ${applied.q}` });
+    return pills;
+  }, [applied]);
+
+  // Clear selection when company scope changes
   useEffect(() => {
     setSelectedIds(new Set());
     setTechId("");
@@ -159,11 +299,21 @@ export function MetersPage() {
     setPage(1);
   }, [scopeKey]);
 
+  // Esc clears error banner (small UX polish)
+  useEffect(() => {
+    function onKeyDown(e) {
+      if (e.key === "Escape") setError(null);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   // Load meters when applied filters or page changes
   useEffect(() => {
     async function load() {
       setLoading(true);
       setError(null);
+
       try {
         const data = await listMetersApi({
           page,
@@ -190,6 +340,7 @@ export function MetersPage() {
         setLoading(false);
       }
     }
+
     load();
   }, [page, applied, role, nav]);
 
@@ -200,10 +351,9 @@ export function MetersPage() {
     async function loadTechs() {
       setTechLoading(true);
       try {
-        const data = await listAssignableTechsApi(); // { techs: [] }
+        const data = await listAssignableTechsApi();
         setTechs(data?.techs || []);
       } catch (e) {
-        // non-fatal; show in banner
         setError(e);
       } finally {
         setTechLoading(false);
@@ -244,7 +394,8 @@ export function MetersPage() {
 
   return (
     <div className="stack">
-      <div className="card">
+      {/* ---------- FILTER CARD ---------- */}
+      <div className="card meters-filter-panel">
         <div className="row space-between">
           <div>
             <div className="h1">Meters</div>
@@ -255,7 +406,7 @@ export function MetersPage() {
           </div>
         </div>
 
-        {/* Filters (edit freely; ONLY fetch on Apply) */}
+        {/* Filters */}
         <div className="grid grid-3" style={{ marginTop: 12 }}>
           <label className="field">
             <div className="field-label">Global search (q)</div>
@@ -268,25 +419,58 @@ export function MetersPage() {
             />
           </label>
 
-          <label className="field">
-            <div className="field-label">Missing (optional)</div>
-            <select
-              className="input"
-              value={form.missing}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, missing: e.target.value }))
-              }
-              disabled={loading}
-            >
-              <option value="">(none)</option>
-              {MISSING_OPTIONS.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </select>
-            <div className="field-hint">Filter “missing data”</div>
-          </label>
+          {/* Missing chips (AUTO APPLY) */}
+          <div className="field">
+            <div className="field-label">Missing</div>
+
+            <div className="chips">
+              {MISSING_CHIPS.map((c) => {
+                const set = parseMissing(form.missing);
+                const active = set.has(c.key);
+
+                return (
+                  <button
+                    key={c.key}
+                    type="button"
+                    className={`chip chip-${c.key} ${active ? "chip-active" : ""}`}
+                    disabled={loading}
+                    onClick={() => {
+                      const nextMissing = toggleMissingChip(
+                        form.missing,
+                        c.key,
+                      );
+                      const next = { ...form, missing: nextMissing };
+                      setForm(next);
+                      applyNow(next);
+                    }}
+                    title="Click to apply immediately"
+                  >
+                    {c.label}
+                  </button>
+                );
+              })}
+
+              {form.missing ? (
+                <button
+                  type="button"
+                  className="chip chip-clear"
+                  disabled={loading}
+                  onClick={() => {
+                    const next = { ...form, missing: "" };
+                    setForm(next);
+                    applyNow(next);
+                  }}
+                >
+                  Clear
+                </button>
+              ) : null}
+            </div>
+
+            <div className="field-hint missing-hint">
+              Tip: “Any missing” is OR across fields. Specific chips combine
+              with AND.
+            </div>
+          </div>
 
           <label className="field">
             <div className="field-label">Limit</div>
@@ -307,7 +491,7 @@ export function MetersPage() {
 
         <div className="grid grid-4" style={{ marginTop: 12 }}>
           <label className="field">
-            <div className="field-label">Electronic ID (column filter)</div>
+            <div className="field-label">Electronic ID</div>
             <input
               className="input"
               value={form.electronicId}
@@ -319,7 +503,7 @@ export function MetersPage() {
           </label>
 
           <label className="field">
-            <div className="field-label">Account # (column filter)</div>
+            <div className="field-label">Account #</div>
             <input
               className="input"
               value={form.accountNumber}
@@ -331,7 +515,7 @@ export function MetersPage() {
           </label>
 
           <label className="field">
-            <div className="field-label">Address (column filter)</div>
+            <div className="field-label">Address</div>
             <input
               className="input"
               value={form.address}
@@ -343,7 +527,7 @@ export function MetersPage() {
           </label>
 
           <label className="field">
-            <div className="field-label">Route (column filter)</div>
+            <div className="field-label">Route</div>
             <input
               className="input"
               value={form.route}
@@ -373,7 +557,7 @@ export function MetersPage() {
           </label>
 
           <label className="field">
-            <div className="field-label">Sort (fallback controls)</div>
+            <div className="field-label">Sort</div>
             <div className="row">
               <select
                 className="input"
@@ -383,16 +567,11 @@ export function MetersPage() {
                 }
                 disabled={loading}
               >
-                <option value="accountNumber">accountNumber</option>
-                <option value="electronicId">electronicId</option>
-                <option value="address">address</option>
-                <option value="route">route</option>
-                <option value="customerName">customerName</option>
-                <option value="lastApprovedUpdateAt">
-                  lastApprovedUpdateAt
-                </option>
-                <option value="createdAt">createdAt</option>
-                <option value="updatedAt">updatedAt</option>
+                {SORT_FIELDS.map((f) => (
+                  <option key={f.key} value={f.key}>
+                    {f.label}
+                  </option>
+                ))}
               </select>
               <select
                 className="input"
@@ -410,11 +589,26 @@ export function MetersPage() {
 
           <div className="field">
             <div className="field-label">Actions</div>
-            <button className="btn" onClick={onApplyClicked} disabled={loading}>
-              Apply (reset to page 1)
-            </button>
+            <div className="meters-actions-row">
+              <button
+                className="btn"
+                onClick={onApplyClicked}
+                disabled={loading}
+              >
+                Apply
+              </button>
+
+              <button
+                className="btn btn-ghost"
+                disabled={loading}
+                onClick={clearFilters}
+              >
+                Clear filters
+              </button>
+            </div>
+
             <div className="field-hint">
-              Applies filters/sort. (Selection persists across applies.)
+              Most filters apply on click Apply. Missing chips apply instantly.
             </div>
           </div>
         </div>
@@ -424,6 +618,7 @@ export function MetersPage() {
       <SuccessBanner message={success} onDismiss={() => setSuccess("")} />
       {loading ? <LoadingBlock title="Loading meters..." /> : null}
 
+      {/* ---------- RESULTS CARD ---------- */}
       {!loading && payload ? (
         <div className="card">
           {/* Assignment toolbar (admin/superadmin only) */}
@@ -462,6 +657,7 @@ export function MetersPage() {
                 >
                   Clear selection
                 </button>
+
                 <button
                   className="btn btn-primary"
                   onClick={assignSelected}
@@ -473,19 +669,68 @@ export function MetersPage() {
             </div>
           ) : null}
 
+          {/* ✅ Pills + meta go ABOVE table/pagination (valid HTML) */}
+          {filterPills.length ? (
+            <div className="pill-row" style={{ marginBottom: 10 }}>
+              {filterPills.map((p) => (
+                <button
+                  key={p.key}
+                  type="button"
+                  className="pill"
+                  onClick={() => clearOneFilter(p.key)}
+                  title="Remove filter"
+                  disabled={loading}
+                >
+                  {p.label} <span className="pill-x">✕</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+
+          <div className="meters-meta" style={{ marginBottom: 10 }}>
+            <span className="muted">
+              Showing <strong>{startIndex}</strong>–<strong>{endIndex}</strong>{" "}
+              of <strong>{total}</strong>
+            </span>
+            {hasFiltersApplied ? (
+              <span className="muted"> • Filters applied</span>
+            ) : (
+              <span className="muted"> • No filters</span>
+            )}
+          </div>
+
           <Pagination
             page={payload.page || page}
             limit={payload.limit || applied.limit}
             count={payload.count || 0}
-            onPageChange={setPage}
+            onPageChange={(p) => {
+              setPage(p);
+              setSuccess("");
+              setError(null);
+            }}
           />
 
+          {meters.length === 0 ? (
+            <div className="card card-subtle" style={{ marginTop: 12 }}>
+              <div className="h2">No meters found</div>
+              <div className="muted">
+                Try clearing filters, changing “Missing”, or broadening your
+                search.
+              </div>
+              <div style={{ marginTop: 10 }}>
+                <button className="btn btn-ghost" onClick={clearFilters}>
+                  Reset filters
+                </button>
+              </div>
+            </div>
+          ) : null}
+
           <div className="table-wrap">
-            <table className="table">
+            <table className="table meters-table">
               <thead>
                 <tr>
                   {canAssign ? (
-                    <th className="th-sort" style={{ width: 46 }}>
+                    <th style={{ width: 46 }}>
                       <input
                         type="checkbox"
                         checked={allOnPageSelected}
@@ -495,7 +740,7 @@ export function MetersPage() {
                     </th>
                   ) : null}
 
-                  <th>ID</th>
+                  <th>Actions</th>
 
                   <th
                     className="th-sort"
@@ -503,6 +748,7 @@ export function MetersPage() {
                   >
                     Electronic ID{sortGlyph("electronicId")}
                   </th>
+
                   <th
                     className="th-sort"
                     onClick={() => toggleSort("accountNumber")}
@@ -534,13 +780,21 @@ export function MetersPage() {
 
                   <th>Lat</th>
                   <th>Lng</th>
-                  <th>Meter Size</th>
+
+                  <th
+                    className="th-sort"
+                    onClick={() => toggleSort("meterSize")}
+                  >
+                    Meter Size{sortGlyph("meterSize")}
+                  </th>
+
                   <th
                     className="th-sort"
                     onClick={() => toggleSort("numberOfPictures")}
                   >
                     # Pics{sortGlyph("numberOfPictures")}
                   </th>
+
                   <th>Notes</th>
                 </tr>
               </thead>
@@ -566,28 +820,28 @@ export function MetersPage() {
                               type="checkbox"
                               checked={selected}
                               onChange={() => toggleRowSelection(mid)}
+                              title="Select meter"
                             />
                           ) : null}
                         </td>
                       ) : null}
 
+                      {/* ✅ User-facing Actions (no raw id shown) */}
                       <td>
                         {mid ? (
-                          <Link to={`/meters/${encodeURIComponent(mid)}`}>
-                            {mid}
-                          </Link>
-                        ) : (
-                          <span className="muted">(no id)</span>
-                        )}
-                        {mid ? (
-                          <div className="muted">
+                          <div className="row" style={{ gap: 10 }}>
+                            <Link to={`/meters/${encodeURIComponent(mid)}`}>
+                              View
+                            </Link>
                             <Link
                               to={`/meters/${encodeURIComponent(mid)}/updates`}
                             >
-                              updates
+                              Updates
                             </Link>
                           </div>
-                        ) : null}
+                        ) : (
+                          <span className="muted">—</span>
+                        )}
                       </td>
 
                       <td>{m?.electronicId ?? ""}</td>
@@ -612,7 +866,11 @@ export function MetersPage() {
             page={payload.page || page}
             limit={payload.limit || applied.limit}
             count={payload.count || 0}
-            onPageChange={setPage}
+            onPageChange={(p) => {
+              setPage(p);
+              setSuccess("");
+              setError(null);
+            }}
           />
         </div>
       ) : null}

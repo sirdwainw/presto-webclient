@@ -83,3 +83,267 @@
   /* “recently approved” highlight */
   background: rgba(30, 140, 90, 0.18) !important;
 }
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.chip {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.9);
+  border-radius: 999px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.chip:hover {
+  background: rgba(255, 255, 255, 0.10);
+}
+
+.chip-active {
+  border-color: rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.chip-clear {
+  opacity: 0.85;
+}
+.pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.pill {
+  border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.92);
+  border-radius: 999px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.pill:hover {
+  background: rgba(255,255,255,0.12);
+}
+
+.pill-x {
+  opacity: 0.8;
+  margin-left: 6px;
+}
+/* Give pills + meta breathing room above the sticky header */
+.pill-row {
+  margin-bottom: 10px;
+}
+
+/* Sticky header sits under pills/meta (prevents overlap in some layouts) */
+.meters-table th {
+  top: 0;              /* keep */
+}
+
+/* If your table sits inside a scroll container, make sure it scrolls */
+.table-wrap {
+  overflow: auto;
+}
+
+/* Better alignment for Actions column */
+.meters-table td a {
+  text-decoration: underline;
+}
+
+/* Selected row (if you use row-selected class) */
+.row-selected td {
+  background: rgba(80, 140, 255, 0.12) !important;
+}
+
+/* Make tiny columns not explode the layout */
+.meters-table td,
+.meters-table th {
+  white-space: nowrap;
+}
+
+.meters-table td.cell-wrap {
+  white-space: normal; /* keep wrapping only where you explicitly want it */
+}
+
+/* Optional: keep action links on one line */
+.meters-table td .row {
+  white-space: nowrap;
+}
+.meters-table td:first-child a {
+  font-weight: 600;
+}
+/* Per-chip accent colors when active */
+.chip-active.chip-any {
+  border-color: rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, 0.20);
+}
+
+.chip-active.chip-latlng {
+  border-color: rgba(80, 140, 255, 0.65);
+  background: rgba(80, 140, 255, 0.22);
+}
+
+.chip-active.chip-notes {
+  border-color: rgba(240, 190, 60, 0.70);
+  background: rgba(240, 190, 60, 0.22);
+}
+
+.chip-active.chip-photo {
+  border-color: rgba(220, 90, 160, 0.70);
+  background: rgba(220, 90, 160, 0.22);
+}
+
+.chip-active.chip-meterSize {
+  border-color: rgba(60, 200, 140, 0.70);
+  background: rgba(60, 200, 140, 0.22);
+}
+.chip-active { font-weight: 600; }
+/* --- FILTER PANEL POLISH --- */
+
+/* Make the top filter card feel like a panel */
+.meters-filter-panel {
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(10, 18, 35, 0.65);
+  box-shadow: 0 12px 28px rgba(0,0,0,0.25);
+}
+
+/* Give filter grids a consistent rhythm */
+.meters-filter-panel .grid {
+  row-gap: 14px;
+}
+
+/* Labels + hints tighter */
+.meters-filter-panel .field-label {
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  opacity: 0.9;
+}
+
+.meters-filter-panel .field-hint {
+  font-size: 11px;
+  opacity: 0.75;
+}
+
+/* Inputs: slightly stronger borders so they read as controls */
+.meters-filter-panel .input {
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.06);
+}
+
+.meters-filter-panel .input:focus {
+  outline: none;
+  border-color: rgba(80, 140, 255, 0.55);
+  box-shadow: 0 0 0 3px rgba(80, 140, 255, 0.18);
+}
+
+/* Chips feel like a grouped control */
+.meters-filter-panel .chips {
+  padding: 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.04);
+}
+
+/* Chips: slightly smaller and more compact for a toolbar row */
+.meters-filter-panel .chip {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+/* Actions area: right-aligned feel and spacing */
+.meters-actions-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.meters-actions-row .btn {
+  height: 34px;
+  padding: 0 12px;
+}
+
+/* Optional: make Apply the primary visual (only if your btn styles support it) */
+.meters-actions-row .btn-primary {
+  box-shadow: 0 10px 18px rgba(0,0,0,0.25);
+}
+
+/* Subtle divider between filter sections */
+.meters-divider {
+  height: 1px;
+  width: 100%;
+  background: rgba(255,255,255,0.08);
+  margin: 12px 0;
+}
+/* Keep filter rows aligned even when only some fields have hints */
+.meters-filter-panel .field-hint {
+  min-height: 14px;     /* reserves space so rows don't jump */
+  margin-top: 6px;
+  line-height: 14px;
+}
+
+/* If a field has no hint, keep spacing consistent */
+.meters-filter-panel .field .field-hint:empty {
+  min-height: 14px;
+}
+
+/* Optional: hide hints on narrow screens to reduce clutter */
+@media (max-width: 900px) {
+  .meters-filter-panel .field-hint {
+    display: none;
+  }
+}
+/* ---------- FIX TIP PLACEMENT / ALIGNMENT ---------- */
+
+/* Make every field lay out consistently: label, control, hint */
+.meters-filter-panel .field {
+  display: grid;
+  grid-template-rows: auto auto auto;
+  gap: 6px;
+}
+
+/* Reserve the same hint space for all fields so rows align */
+.meters-filter-panel .field-hint {
+  min-height: 14px;
+  line-height: 14px;
+  margin-top: 0;
+}
+
+/* The missing hint is allowed to wrap without breaking the grid height */
+.meters-filter-panel .field-hint.missing-hint {
+  min-height: 14px;
+  line-height: 14px;
+  white-space: normal;
+  max-width: 520px; /* prevents the long line from stretching weird */
+}
+
+/* Keep chips from forcing extra height */
+.meters-filter-panel .chips {
+  padding: 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.04);
+  align-items: center;
+}
+
+/* If the hint wraps to a second line, it won't push controls down as much */
+.meters-filter-panel .field-hint.missing-hint {
+  display: block;
+}
+
+/* Optional: On very wide screens, clamp hint to one line with ellipsis */
+@media (min-width: 1200px) {
+  .meters-filter-panel .field-hint.missing-hint {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 600px;
+  }
+}
