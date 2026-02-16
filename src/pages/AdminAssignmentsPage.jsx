@@ -9,13 +9,14 @@ import { SuccessBanner } from "../components/SuccessBanner";
 import { LoadingBlock } from "../components/LoadingBlock";
 import { useAuth } from "../auth/AuthContext";
 import { useNavigate } from "react-router-dom";
+import { getEntityId } from "../api/apiClient";
 
 function isCompanyScopeError(e) {
   const msg = String(e?.error || e?.message || "");
   return e?.status === 400 && msg.startsWith("No company scope selected");
 }
 
-function parseIds(text) {
+function parseTokens(text) {
   const raw = String(text || "");
   return raw
     .split(/[\s,]+/g)
@@ -49,34 +50,37 @@ export function AdminAssignmentsPage() {
   const [queryError, setQueryError] = useState(null);
   const [querySuccess, setQuerySuccess] = useState("");
 
-  // assign by explicit ids
-  const [meterIdsText, setMeterIdsText] = useState("");
+  // assign by explicit EIDs
+  const [meterEidsText, setMeterEidsText] = useState("");
   const [assigningIds, setAssigningIds] = useState(false);
   const [idsError, setIdsError] = useState(null);
   const [idsSuccess, setIdsSuccess] = useState("");
 
-  useEffect(() => {
-    async function loadTechs() {
-      setLoadingTechs(true);
-      setTechError(null);
-      try {
-        const data = await listAssignableTechsApi();
-        setTechsPayload(data);
+  async function loadTechs() {
+    setLoadingTechs(true);
+    setTechError(null);
+    try {
+      const data = await listAssignableTechsApi();
+      setTechsPayload(data);
 
-        const firstId = data?.techs?.[0]?.id || "";
-        setSelectedTechId((prev) => prev || firstId);
-      } catch (e) {
-        if (isCompanyScopeError(e) && role === "superadmin") {
-          nav("/superadmin/context");
-          return;
-        }
-        setTechError(e);
-      } finally {
-        setLoadingTechs(false);
+      const firstTech = data?.techs?.[0];
+      const firstId = getEntityId(firstTech) || "";
+      setSelectedTechId((prev) => prev || firstId);
+    } catch (e) {
+      if (isCompanyScopeError(e) && role === "superadmin") {
+        nav("/superadmin/context");
+        return;
       }
+      setTechError(e);
+    } finally {
+      setLoadingTechs(false);
     }
+  }
+
+  useEffect(() => {
     loadTechs();
-  }, [role, nav]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [role]);
 
   const missingCsv = useMemo(() => {
     return Object.entries(missing)
@@ -115,7 +119,7 @@ export function AdminAssignmentsPage() {
     }
   }
 
-  async function onAssignByIds() {
+  async function onAssignByEids() {
     setIdsError(null);
     setIdsSuccess("");
 
@@ -124,17 +128,21 @@ export function AdminAssignmentsPage() {
       return;
     }
 
-    const meterIds = parseIds(meterIdsText);
-    if (meterIds.length === 0) {
-      setIdsError({ error: "Paste at least one meter id." });
+    const tokens = parseTokens(meterEidsText);
+    if (tokens.length === 0) {
+      setIdsError({ error: "Paste at least one EID." });
       return;
     }
 
     setAssigningIds(true);
     try {
-      const res = await postAssignments({ userId: selectedTechId, meterIds });
-      setIdsSuccess(`Assigned ${res?.assignedCount ?? 0} meter(s) by id.`);
-      setMeterIdsText("");
+      // Backend now accepts meterIds[] as either Mongo _id OR electronicId
+      const res = await postAssignments({
+        userId: selectedTechId,
+        meterIds: tokens,
+      });
+      setIdsSuccess(`Assigned ${res?.assignedCount ?? 0} meter(s) by EID.`);
+      setMeterEidsText("");
     } catch (e) {
       setIdsError(e);
     } finally {
@@ -148,7 +156,10 @@ export function AdminAssignmentsPage() {
         <div className="h1">Assignments</div>
         <div className="muted">Admin/Superadmin assigns meters to techs.</div>
 
-        <div className="grid grid-3" style={{ marginTop: 12 }}>
+        <div
+          className="grid grid-3"
+          style={{ marginTop: 12, alignItems: "end" }}
+        >
           <label className="field">
             <div className="field-label">Tech</div>
             <select
@@ -158,15 +169,15 @@ export function AdminAssignmentsPage() {
               disabled={loadingTechs}
             >
               <option value="">(select)</option>
-              {techs.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name} • {t.email}
-                </option>
-              ))}
+              {techs.map((t) => {
+                const tid = getEntityId(t) || "";
+                return (
+                  <option key={tid || t.email} value={tid}>
+                    {t.name} • {t.email}
+                  </option>
+                );
+              })}
             </select>
-            <div className="field-hint">
-              Uses <code>GET /api/assignments/techs</code>
-            </div>
           </label>
 
           <div className="field">
@@ -178,12 +189,8 @@ export function AdminAssignmentsPage() {
 
           <div className="field">
             <div className="field-label">Actions</div>
-            <button
-              className="btn"
-              onClick={() => window.location.reload()}
-              disabled={loadingTechs}
-            >
-              Refresh
+            <button className="btn" onClick={loadTechs} disabled={loadingTechs}>
+              {loadingTechs ? "Refreshing..." : "Refresh"}
             </button>
           </div>
         </div>
@@ -195,9 +202,6 @@ export function AdminAssignmentsPage() {
       {/* Assign by query */}
       <div className="card">
         <div className="h2">Assign by missing-data query</div>
-        <div className="muted">
-          Uses <code>POST /api/assignments/by-query</code>
-        </div>
 
         <ErrorBanner error={queryError} onDismiss={() => setQueryError(null)} />
         <SuccessBanner
@@ -205,7 +209,10 @@ export function AdminAssignmentsPage() {
           onDismiss={() => setQuerySuccess("")}
         />
 
-        <div className="grid grid-4" style={{ marginTop: 12 }}>
+        <div
+          className="grid grid-4"
+          style={{ marginTop: 12, alignItems: "stretch" }}
+        >
           <div className="field">
             <div className="field-label">Missing filters</div>
 
@@ -264,6 +271,9 @@ export function AdminAssignmentsPage() {
               onChange={(e) => setRoute(e.target.value)}
               disabled={assigningQuery}
             />
+            <div className="field-hint" style={{ minHeight: 18 }}>
+              &nbsp;
+            </div>
           </label>
 
           <label className="field">
@@ -277,28 +287,36 @@ export function AdminAssignmentsPage() {
               onChange={(e) => setLimit(Number(e.target.value))}
               disabled={assigningQuery}
             />
-            <div className="field-hint">Max 500</div>
+            <div className="field-hint" style={{ minHeight: 18 }}>
+              Max 500
+            </div>
           </label>
 
-          <div className="field">
+          <div
+            className="field"
+            style={{ display: "flex", flexDirection: "column" }}
+          >
             <div className="field-label">Assign</div>
             <button
               className="btn btn-primary"
               onClick={onAssignByQuery}
               disabled={assigningQuery || !selectedTechId}
+              style={{ marginTop: 0 }}
             >
               {assigningQuery ? "Assigning..." : "Assign by query"}
             </button>
+            <div className="field-hint" style={{ minHeight: 18 }}>
+              &nbsp;
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Assign by IDs */}
+      {/* Assign by EIDs */}
       <div className="card">
-        <div className="h2">Assign by meter IDs</div>
+        <div className="h2">Assign by meter EIDs</div>
         <div className="muted">
-          Paste meter ids (one per line or comma-separated). Uses{" "}
-          <code>POST /api/assignments</code>
+          Paste EIDs (one per line or comma-separated).
         </div>
 
         <ErrorBanner error={idsError} onDismiss={() => setIdsError(null)} />
@@ -307,33 +325,35 @@ export function AdminAssignmentsPage() {
           onDismiss={() => setIdsSuccess("")}
         />
 
-        <div className="grid grid-2" style={{ marginTop: 12 }}>
+        <div
+          className="grid grid-2"
+          style={{ marginTop: 12, alignItems: "end" }}
+        >
           <label className="field">
-            <div className="field-label">Meter IDs</div>
+            <div className="field-label">Meter EIDs</div>
             <textarea
               className="input"
               rows={6}
-              value={meterIdsText}
-              onChange={(e) => setMeterIdsText(e.target.value)}
+              value={meterEidsText}
+              onChange={(e) => setMeterEidsText(e.target.value)}
               disabled={assigningIds}
-              placeholder="6965c9494899d2fb68646d8c
-6965c9494899d2fb68646d8d"
+              placeholder={`12949654
+12949655`}
             />
+            <div className="field-hint">
+              Tip: Copy EIDs directly from the Meters table.
+            </div>
           </label>
 
           <div className="field">
             <div className="field-label">Assign</div>
             <button
               className="btn btn-primary"
-              onClick={onAssignByIds}
+              onClick={onAssignByEids}
               disabled={assigningIds || !selectedTechId}
             >
-              {assigningIds ? "Assigning..." : "Assign these IDs"}
+              {assigningIds ? "Assigning..." : "Assign these EIDs"}
             </button>
-
-            <div className="field-hint" style={{ marginTop: 10 }}>
-              Tip: Use the Meters page to find IDs, then paste here.
-            </div>
           </div>
         </div>
       </div>

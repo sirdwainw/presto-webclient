@@ -347,3 +347,313 @@
     max-width: 600px;
   }
 }
+/* ---------- ASSIGNMENT TOOLBAR (Meters table assignment flow) ---------- */
+
+.table-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+
+  padding: 12px 12px;
+  margin-bottom: 10px;
+
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.04);
+  border-radius: 14px;
+}
+
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.toolbar-group .input {
+  height: 36px;
+}
+
+.toolbar-group .btn {
+  height: 36px;
+  padding: 0 14px;
+}
+
+/* Make the select look “anchored” and not stretch weird */
+.table-toolbar select.input {
+  min-width: 320px;
+}
+
+/* On small screens: stack nicely */
+@media (max-width: 900px) {
+  .table-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .table-toolbar select.input {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .toolbar-group {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
+
+/* ---------- TABLE LAYOUT POLISH ---------- */
+
+/* Give the table a predictable layout so one long cell doesn't blow everything up */
+.meters-table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+/* Default cells: keep tight */
+.meters-table th,
+.meters-table td {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Allow wrap only where you explicitly want it */
+.meters-table td.cell-wrap {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: initial;
+}
+
+/* Assigned To column should wrap (name + email) */
+.meters-table td.assigned-wrap {
+  white-space: normal;
+  word-break: break-word;
+  max-width: 260px;
+}
+
+/* Make Actions column not waste space */
+.meters-table th:first-child,
+.meters-table td:first-child {
+  width: 46px;
+}
+
+.meters-table th:nth-child(2),
+.meters-table td:nth-child(2) {
+  width: 90px;
+}
+
+/* ---------- SCROLL + STICKY HEADER RELIABILITY ---------- */
+
+/* Ensure the scroll container is the one scrolling */
+.table-wrap {
+  overflow: auto;
+  max-height: 70vh; /* optional: keeps table usable on big datasets */
+}
+
+/* Sticky header stays readable */
+.meters-table th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: rgba(10, 18, 35, 0.95);
+  backdrop-filter: blur(6px);
+}
+/* --- Assignment toolbar (Meters page) --- */
+.table-toolbar {
+  display: grid;
+  grid-template-columns: 1fr minmax(280px, 420px) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  margin-bottom: 12px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.04);
+  border-radius: 14px;
+}
+
+.toolbar-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.toolbar-title {
+  font-weight: 800;
+}
+
+.toolbar-mid .input {
+  width: 100%;
+}
+
+.toolbar-right {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 1100px) {
+  .table-toolbar {
+    grid-template-columns: 1fr;
+  }
+  .toolbar-right {
+    justify-content: flex-start;
+  }
+}
+/* ===== Meters filter panel: compact ops toolbar ===== */
+
+.meters-filter-panel {
+  padding: 16px;
+}
+
+/* Force a compact grid in 2 rows */
+.meters-filter-panel .grid.grid-3,
+.meters-filter-panel .grid.grid-4 {
+  display: grid;
+  gap: 12px;
+}
+
+/* Row 1: q | missing | limit */
+.meters-filter-panel .grid.grid-3 {
+  grid-template-columns: 2fr 2fr 1fr;
+  align-items: start;
+}
+
+/* Row 2: eid | acct | address | route */
+.meters-filter-panel .grid.grid-4 {
+  grid-template-columns: 1fr 1fr 2fr 1fr;
+  align-items: start;
+}
+
+/* Row 3: highlight | sort | actions */
+.meters-filter-panel .grid.grid-3:last-of-type {
+  grid-template-columns: 2fr 2fr 1fr;
+}
+
+/* Make fields not look enormous */
+.meters-filter-panel .input {
+  height: 40px;
+  border-radius: 12px;
+}
+
+/* Chips should NOT stretch across the page */
+.meters-filter-panel .chips {
+  max-width: 680px;
+  width: 100%;
+  padding: 8px;
+  border-radius: 12px;
+}
+
+/* Chips: slightly smaller */
+.meters-filter-panel .chip {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+/* Hint line tighter */
+.meters-filter-panel .field-hint {
+  margin-top: 6px;
+  opacity: 0.75;
+}
+
+/* Actions aligned like a toolbar */
+.meters-actions-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.meters-actions-row .btn {
+  height: 40px;
+  padding: 0 14px;
+  border-radius: 12px;
+}
+
+/* Mobile: stack cleanly */
+@media (max-width: 1100px) {
+  .meters-filter-panel .grid.grid-3,
+  .meters-filter-panel .grid.grid-4 {
+    grid-template-columns: 1fr;
+  }
+
+  .meters-filter-panel .chips {
+    max-width: 100%;
+  }
+}
+/* ===== Collapsible Filters ===== */
+
+.filters {
+  padding: 0;
+  overflow: hidden;
+}
+
+.filters-summary {
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+}
+
+.filters-summary::-webkit-details-marker {
+  display: none;
+}
+
+.filters-summary-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.filters-title {
+  font-weight: 800;
+  font-size: 16px;
+  white-space: nowrap;
+}
+
+.filters-chips {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.pill-static {
+  cursor: default;
+  pointer-events: none;
+  opacity: 0.9;
+}
+
+.filters-summary-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: nowrap;
+}
+
+.filters-caret {
+  opacity: 0.7;
+  transition: transform 160ms ease;
+}
+
+details[open] .filters-caret {
+  transform: rotate(180deg);
+}
+
+.filters-body {
+  padding: 0 16px 16px 16px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+
+/* Optional: when collapsed, tighten the card */
+details.filters:not([open]) .filters-body {
+  display: none;
+}

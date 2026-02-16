@@ -1,13 +1,10 @@
 // src/pages/MetersPage.jsx
-// Polish + fixes:
-// - ✅ Fix "rows out of order" issue (you had <div> inside <tr>/<thead> which breaks table layout)
-// - ✅ Remove DB id column from the table (no more Mongo _id shown as a column)
-// - ✅ Keep row click navigation to meter details without showing DB id (uses a "View" link)
-// - ✅ Put filter pills + "Showing X–Y of Z" ABOVE the table (valid HTML, consistent layout)
-// - ✅ Missing chips auto-apply; other filters still Apply-based
-// - ✅ Safer sort: don't toggle to fields not supported by backend (meterSerialNumber/numberOfPictures weren’t in your allowed list in backend)
-// - ✅ Fix className typo ".meters-table" (dot should not be in className)
-// - ✅ Add small UX: Esc clears error banner, success clears on filter/apply/page change
+// Collapsible filter panel + assignment flow stays in table toolbar.
+// Notes:
+// - Filters are collapsed by default and remember state in localStorage.
+// - Apply/Clear live in the collapsed header, so the expanded panel is slimmer.
+// - Missing chips still auto-apply.
+// - Assignment uses selectedIds (Mongo ids) behind the scenes, but you don’t display Mongo ids.
 
 import React, { useEffect, useMemo, useState } from "react";
 import "./MetersPage.css";
@@ -105,6 +102,15 @@ export function MetersPage() {
   const scopeKey = user?.activeCompanyId || user?.companyId || "noscope";
   const canAssign = role === "admin" || role === "superadmin";
 
+  // Collapsible filters state (remembered)
+  const [filtersOpen, setFiltersOpen] = useState(() => {
+    const v = localStorage.getItem("metersFiltersOpen");
+    return v ? v === "1" : false; // default collapsed
+  });
+  useEffect(() => {
+    localStorage.setItem("metersFiltersOpen", filtersOpen ? "1" : "0");
+  }, [filtersOpen]);
+
   // Apply-based filtering (no fetch-on-type) EXCEPT Missing chips which auto-apply
   const [form, setForm] = useState(() => ({
     q: "",
@@ -192,28 +198,6 @@ export function MetersPage() {
     applyNow({ ...form });
   }
 
-  function toggleSort(field) {
-    // Guard: ensure we only sort by backend-supported fields
-    const allowed = SORT_FIELDS.some((f) => f.key === field);
-    if (!allowed) return;
-
-    const nextDir =
-      applied.sortBy === field
-        ? applied.sortDir === "asc"
-          ? "desc"
-          : "asc"
-        : "asc";
-
-    const next = { ...applied, sortBy: field, sortDir: nextDir };
-    setForm((f) => ({ ...f, sortBy: field, sortDir: nextDir }));
-    applyNow(next);
-  }
-
-  function sortGlyph(field) {
-    if (applied.sortBy !== field) return "";
-    return applied.sortDir === "asc" ? " ▲" : " ▼";
-  }
-
   function toggleRowSelection(id) {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -299,7 +283,7 @@ export function MetersPage() {
     setPage(1);
   }, [scopeKey]);
 
-  // Esc clears error banner (small UX polish)
+  // Esc clears error banner
   useEffect(() => {
     function onKeyDown(e) {
       if (e.key === "Escape") setError(null);
@@ -392,227 +376,275 @@ export function MetersPage() {
     }
   }
 
+  function stopSummaryToggle(e) {
+    // prevents <summary> toggling when clicking buttons/inputs inside it
+    e.preventDefault();
+    e.stopPropagation();
+  }
+
   return (
     <div className="stack">
-      {/* ---------- FILTER CARD ---------- */}
-      <div className="card meters-filter-panel">
-        <div className="row space-between">
-          <div>
-            <div className="h1">Meters</div>
-            <div className="muted">
-              Uses <code>GET /api/meters</code>. Highlight uses{" "}
-              <code>meter.lastApprovedUpdateAt</code>.
+      {/* ---------- COLLAPSIBLE FILTER PANEL ---------- */}
+      <details
+        className="card meters-filter-panel filters"
+        open={filtersOpen}
+        onToggle={(e) => setFiltersOpen(e.currentTarget.open)}
+      >
+        <summary className="filters-summary">
+          <div className="filters-summary-left">
+            <div className="filters-title">Meters</div>
+
+            <div className="filters-chips">
+              {filterPills.length ? (
+                <>
+                  {filterPills.slice(0, 3).map((p) => (
+                    <span className="pill pill-static" key={p.key}>
+                      {p.label}
+                    </span>
+                  ))}
+                  {filterPills.length > 3 ? (
+                    <span className="pill pill-static">
+                      +{filterPills.length - 3} more
+                    </span>
+                  ) : null}
+                </>
+              ) : (
+                <span className="muted">No filters applied</span>
+              )}
             </div>
           </div>
-        </div>
 
-        {/* Filters */}
-        <div className="grid grid-3" style={{ marginTop: 12 }}>
-          <label className="field">
-            <div className="field-label">Global search (q)</div>
-            <input
-              className="input"
-              value={form.q}
-              onChange={(e) => setForm((f) => ({ ...f, q: e.target.value }))}
+          <div className="filters-summary-right" onClick={stopSummaryToggle}>
+            <button
+              type="button"
+              className="btn"
+              onClick={onApplyClicked}
               disabled={loading}
-              placeholder="Search across EID, acct, serial, customer, address, route"
-            />
-          </label>
+              title="Apply current filter form"
+            >
+              Apply
+            </button>
 
-          {/* Missing chips (AUTO APPLY) */}
-          <div className="field">
-            <div className="field-label">Missing</div>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={clearFilters}
+              disabled={loading}
+              title="Reset filters"
+            >
+              Clear
+            </button>
 
-            <div className="chips">
-              {MISSING_CHIPS.map((c) => {
-                const set = parseMissing(form.missing);
-                const active = set.has(c.key);
+            <span className="filters-caret" aria-hidden="true">
+              ▾
+            </span>
+          </div>
+        </summary>
 
-                return (
+        <div className="filters-body">
+          {/* Filters */}
+          <div className="grid grid-3" style={{ marginTop: 12 }}>
+            <label className="field">
+              <div className="field-label">Global search </div>
+              <input
+                className="input"
+                value={form.q}
+                onChange={(e) => setForm((f) => ({ ...f, q: e.target.value }))}
+                disabled={loading}
+                placeholder="Search across EID, acct, serial, customer, address, route"
+              />
+              <div className="field-hint" />
+            </label>
+
+            {/* Missing chips (AUTO APPLY) */}
+            <div className="field">
+              <div className="field-label">Missing</div>
+
+              <div className="chips">
+                {MISSING_CHIPS.map((c) => {
+                  const set = parseMissing(form.missing);
+                  const active = set.has(c.key);
+
+                  return (
+                    <button
+                      key={c.key}
+                      type="button"
+                      className={`chip chip-${c.key} ${active ? "chip-active" : ""}`}
+                      disabled={loading}
+                      onClick={() => {
+                        const nextMissing = toggleMissingChip(
+                          form.missing,
+                          c.key,
+                        );
+                        const next = { ...form, missing: nextMissing };
+                        setForm(next);
+                        applyNow(next);
+                      }}
+                      title="Click to apply immediately"
+                    >
+                      {c.label}
+                    </button>
+                  );
+                })}
+
+                {form.missing ? (
                   <button
-                    key={c.key}
                     type="button"
-                    className={`chip chip-${c.key} ${active ? "chip-active" : ""}`}
+                    className="chip chip-clear"
                     disabled={loading}
                     onClick={() => {
-                      const nextMissing = toggleMissingChip(
-                        form.missing,
-                        c.key,
-                      );
-                      const next = { ...form, missing: nextMissing };
+                      const next = { ...form, missing: "" };
                       setForm(next);
                       applyNow(next);
                     }}
-                    title="Click to apply immediately"
                   >
-                    {c.label}
+                    Clear
                   </button>
-                );
-              })}
+                ) : null}
+              </div>
 
-              {form.missing ? (
-                <button
-                  type="button"
-                  className="chip chip-clear"
+              <div className="field-hint missing-hint">
+                Tip: “Any missing” is OR across fields. Specific chips combine
+                with AND.
+              </div>
+            </div>
+
+            <label className="field">
+              <div className="field-label">Limit</div>
+              <input
+                className="input"
+                type="number"
+                min={1}
+                max={200}
+                value={form.limit}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    limit: Number(e.target.value) || 50,
+                  }))
+                }
+                disabled={loading}
+              />
+              <div className="field-hint">Max 200</div>
+            </label>
+          </div>
+
+          <div className="grid grid-4" style={{ marginTop: 12 }}>
+            <label className="field">
+              <div className="field-label">Electronic ID</div>
+              <input
+                className="input"
+                value={form.electronicId}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, electronicId: e.target.value }))
+                }
+                disabled={loading}
+              />
+              <div className="field-hint" />
+            </label>
+
+            <label className="field">
+              <div className="field-label">Account #</div>
+              <input
+                className="input"
+                value={form.accountNumber}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, accountNumber: e.target.value }))
+                }
+                disabled={loading}
+              />
+              <div className="field-hint" />
+            </label>
+
+            <label className="field">
+              <div className="field-label">Address</div>
+              <input
+                className="input"
+                value={form.address}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, address: e.target.value }))
+                }
+                disabled={loading}
+              />
+              <div className="field-hint" />
+            </label>
+
+            <label className="field">
+              <div className="field-label">Route</div>
+              <input
+                className="input"
+                value={form.route}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, route: e.target.value }))
+                }
+                disabled={loading}
+              />
+              <div className="field-hint" />
+            </label>
+          </div>
+
+          <div className="grid grid-3" style={{ marginTop: 12 }}>
+            <label className="field">
+              <div className="field-label">Highlight recently approved</div>
+              <select
+                className="input"
+                value={highlightWindow}
+                onChange={(e) => setHighlightWindow(e.target.value)}
+                disabled={loading}
+              >
+                <option value="off">off</option>
+                <option value="1h">last 1 hour</option>
+                <option value="24h">last 24 hours</option>
+                <option value="7d">last 7 days</option>
+                <option value="30d">last 30 days</option>
+              </select>
+              <div className="field-hint" />
+            </label>
+
+            <label className="field">
+              <div className="field-label">Sort</div>
+              <div className="row">
+                <select
+                  className="input"
+                  value={form.sortBy}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, sortBy: e.target.value }))
+                  }
                   disabled={loading}
-                  onClick={() => {
-                    const next = { ...form, missing: "" };
-                    setForm(next);
-                    applyNow(next);
-                  }}
                 >
-                  Clear
-                </button>
-              ) : null}
-            </div>
+                  {SORT_FIELDS.map((f) => (
+                    <option key={f.key} value={f.key}>
+                      {f.label}
+                    </option>
+                  ))}
+                </select>
 
-            <div className="field-hint missing-hint">
-              Tip: “Any missing” is OR across fields. Specific chips combine
-              with AND.
-            </div>
-          </div>
+                <select
+                  className="input"
+                  value={form.sortDir}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, sortDir: e.target.value }))
+                  }
+                  disabled={loading}
+                >
+                  <option value="asc">asc</option>
+                  <option value="desc">desc</option>
+                </select>
+              </div>
+              <div className="field-hint">Apply uses current sort</div>
+            </label>
 
-          <label className="field">
-            <div className="field-label">Limit</div>
-            <input
-              className="input"
-              type="number"
-              min={1}
-              max={200}
-              value={form.limit}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, limit: Number(e.target.value) || 50 }))
-              }
-              disabled={loading}
-            />
-            <div className="field-hint">Max 200</div>
-          </label>
-        </div>
-
-        <div className="grid grid-4" style={{ marginTop: 12 }}>
-          <label className="field">
-            <div className="field-label">Electronic ID</div>
-            <input
-              className="input"
-              value={form.electronicId}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, electronicId: e.target.value }))
-              }
-              disabled={loading}
-            />
-          </label>
-
-          <label className="field">
-            <div className="field-label">Account #</div>
-            <input
-              className="input"
-              value={form.accountNumber}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, accountNumber: e.target.value }))
-              }
-              disabled={loading}
-            />
-          </label>
-
-          <label className="field">
-            <div className="field-label">Address</div>
-            <input
-              className="input"
-              value={form.address}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, address: e.target.value }))
-              }
-              disabled={loading}
-            />
-          </label>
-
-          <label className="field">
-            <div className="field-label">Route</div>
-            <input
-              className="input"
-              value={form.route}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, route: e.target.value }))
-              }
-              disabled={loading}
-            />
-          </label>
-        </div>
-
-        <div className="grid grid-3" style={{ marginTop: 12 }}>
-          <label className="field">
-            <div className="field-label">Highlight recently approved</div>
-            <select
-              className="input"
-              value={highlightWindow}
-              onChange={(e) => setHighlightWindow(e.target.value)}
-              disabled={loading}
-            >
-              <option value="off">off</option>
-              <option value="1h">last 1 hour</option>
-              <option value="24h">last 24 hours</option>
-              <option value="7d">last 7 days</option>
-              <option value="30d">last 30 days</option>
-            </select>
-          </label>
-
-          <label className="field">
-            <div className="field-label">Sort</div>
-            <div className="row">
-              <select
-                className="input"
-                value={form.sortBy}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, sortBy: e.target.value }))
-                }
-                disabled={loading}
-              >
-                {SORT_FIELDS.map((f) => (
-                  <option key={f.key} value={f.key}>
-                    {f.label}
-                  </option>
-                ))}
-              </select>
-              <select
-                className="input"
-                value={form.sortDir}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, sortDir: e.target.value }))
-                }
-                disabled={loading}
-              >
-                <option value="asc">asc</option>
-                <option value="desc">desc</option>
-              </select>
-            </div>
-          </label>
-
-          <div className="field">
-            <div className="field-label">Actions</div>
-            <div className="meters-actions-row">
-              <button
-                className="btn"
-                onClick={onApplyClicked}
-                disabled={loading}
-              >
-                Apply
-              </button>
-
-              <button
-                className="btn btn-ghost"
-                disabled={loading}
-                onClick={clearFilters}
-              >
-                Clear filters
-              </button>
-            </div>
-
-            <div className="field-hint">
-              Most filters apply on click Apply. Missing chips apply instantly.
+            <div className="field">
+              <div className="field-label">Quick info</div>
+              <div className="muted" style={{ paddingTop: 10 }}>
+                Most filters apply when you click <strong>Apply</strong>.
+                Missing chips apply instantly.
+              </div>
+              <div className="field-hint" />
             </div>
           </div>
         </div>
-      </div>
+      </details>
 
       <ErrorBanner error={error} onDismiss={() => setError(null)} />
       <SuccessBanner message={success} onDismiss={() => setSuccess("")} />
@@ -627,8 +659,7 @@ export function MetersPage() {
               <div className="toolbar-group">
                 <strong>Assign</strong>
                 <span className="muted">
-                  Selected: <strong>{selectedCount}</strong> (persists across
-                  pages/filters)
+                  Selected: <strong>{selectedCount}</strong>
                 </span>
               </div>
 
@@ -669,7 +700,7 @@ export function MetersPage() {
             </div>
           ) : null}
 
-          {/* ✅ Pills + meta go ABOVE table/pagination (valid HTML) */}
+          {/* Pills + meta */}
           {filterPills.length ? (
             <div className="pill-row" style={{ marginBottom: 10 }}>
               {filterPills.map((p) => (
@@ -741,60 +772,16 @@ export function MetersPage() {
                   ) : null}
 
                   <th>Actions</th>
-
-                  <th
-                    className="th-sort"
-                    onClick={() => toggleSort("electronicId")}
-                  >
-                    Electronic ID{sortGlyph("electronicId")}
-                  </th>
-
-                  <th
-                    className="th-sort"
-                    onClick={() => toggleSort("accountNumber")}
-                  >
-                    Account #{sortGlyph("accountNumber")}
-                  </th>
-
-                  <th
-                    className="th-sort"
-                    onClick={() => toggleSort("meterSerialNumber")}
-                  >
-                    Serial #{sortGlyph("meterSerialNumber")}
-                  </th>
-
-                  <th
-                    className="th-sort"
-                    onClick={() => toggleSort("customerName")}
-                  >
-                    Customer{sortGlyph("customerName")}
-                  </th>
-
-                  <th className="th-sort" onClick={() => toggleSort("address")}>
-                    Address{sortGlyph("address")}
-                  </th>
-
-                  <th className="th-sort" onClick={() => toggleSort("route")}>
-                    Route{sortGlyph("route")}
-                  </th>
-
+                  <th>Electronic ID</th>
+                  <th>Account #</th>
+                  <th>Serial #</th>
+                  <th>Customer</th>
+                  <th>Address</th>
+                  <th>Route</th>
                   <th>Lat</th>
                   <th>Lng</th>
-
-                  <th
-                    className="th-sort"
-                    onClick={() => toggleSort("meterSize")}
-                  >
-                    Meter Size{sortGlyph("meterSize")}
-                  </th>
-
-                  <th
-                    className="th-sort"
-                    onClick={() => toggleSort("numberOfPictures")}
-                  >
-                    # Pics{sortGlyph("numberOfPictures")}
-                  </th>
-
+                  <th>Meter Size</th>
+                  <th># Pics</th>
                   <th>Notes</th>
                 </tr>
               </thead>
@@ -826,17 +813,16 @@ export function MetersPage() {
                         </td>
                       ) : null}
 
-                      {/* ✅ User-facing Actions (no raw id shown) */}
                       <td>
                         {mid ? (
                           <div className="row" style={{ gap: 10 }}>
-                            <Link to={`/meters/${encodeURIComponent(mid)}`}>
-                              View
-                            </Link>
                             <Link
                               to={`/meters/${encodeURIComponent(mid)}/updates`}
                             >
-                              Updates
+                              Update
+                            </Link>
+                            <Link to={`/meters/${encodeURIComponent(mid)}`}>
+                              View
                             </Link>
                           </div>
                         ) : (
@@ -844,7 +830,16 @@ export function MetersPage() {
                         )}
                       </td>
 
-                      <td>{m?.electronicId ?? ""}</td>
+                      <td>
+                        {mid ? (
+                          <Link to={`/meters/${encodeURIComponent(mid)}`}>
+                            {m?.electronicId ?? "—"}
+                          </Link>
+                        ) : (
+                          (m?.electronicId ?? "—")
+                        )}
+                      </td>
+
                       <td>{m?.accountNumber ?? ""}</td>
                       <td>{m?.meterSerialNumber ?? ""}</td>
                       <td>{m?.customerName ?? ""}</td>

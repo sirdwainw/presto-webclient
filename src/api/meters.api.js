@@ -1,24 +1,26 @@
+// src/api/meters.api.js
 import { apiFetch } from "./apiClient";
 
-export function listMetersApi(params) {
+// Full meters list (paged)
+export function listMetersApi(params = {}) {
   const qs = new URLSearchParams();
 
-  if (params?.page) qs.set("page", String(params.page));
-  if (params?.limit) qs.set("limit", String(params.limit));
+  if (params.page) qs.set("page", String(params.page));
+  if (params.limit) qs.set("limit", String(params.limit));
 
-  if (params?.q) qs.set("q", String(params.q));
-  if (params?.missing) qs.set("missing", String(params.missing));
+  if (params.q) qs.set("q", String(params.q));
+  if (params.missing) qs.set("missing", String(params.missing));
 
   // column filters
-  if (params?.electronicId) qs.set("electronicId", String(params.electronicId));
-  if (params?.accountNumber)
+  if (params.electronicId) qs.set("electronicId", String(params.electronicId));
+  if (params.accountNumber)
     qs.set("accountNumber", String(params.accountNumber));
-  if (params?.address) qs.set("address", String(params.address));
-  if (params?.route) qs.set("route", String(params.route));
+  if (params.address) qs.set("address", String(params.address));
+  if (params.route) qs.set("route", String(params.route));
 
   // sorting
-  if (params?.sortBy) qs.set("sortBy", String(params.sortBy));
-  if (params?.sortDir) qs.set("sortDir", String(params.sortDir));
+  if (params.sortBy) qs.set("sortBy", String(params.sortBy));
+  if (params.sortDir) qs.set("sortDir", String(params.sortDir));
 
   const query = qs.toString();
   return apiFetch(`/api/meters${query ? `?${query}` : ""}`, { method: "GET" });
@@ -39,4 +41,7 @@ export function createMeterUpdateApi(meterId, body) {
     method: "POST",
     body: JSON.stringify(body),
   });
+}
+export function listMetersQuickApi(params) {
+  return listMetersApi({ ...params, limit: 8 });
 }
