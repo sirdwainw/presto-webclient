@@ -1,18 +1,19 @@
 // src/pages/MetersPage.jsx
-// Polish + fixes:
-// - ✅ Fix "rows out of order" issue (you had <div> inside <tr>/<thead> which breaks table layout)
-// - ✅ Remove DB id column from the table (no more Mongo _id shown as a column)
-// - ✅ Keep row click navigation to meter details without showing DB id (uses a "View" link)
-// - ✅ Put filter pills + "Showing X–Y of Z" ABOVE the table (valid HTML, consistent layout)
-// - ✅ Missing chips auto-apply; other filters still Apply-based
-// - ✅ Safer sort: don't toggle to fields not supported by backend (meterSerialNumber/numberOfPictures weren’t in your allowed list in backend)
-// - ✅ Fix className typo ".meters-table" (dot should not be in className)
-// - ✅ Add small UX: Esc clears error banner, success clears on filter/apply/page change
+// Full replacement: sortable + header-filterable columns with ops:
+// contains / not contains / blank / not blank
+//
+// Notes:
+// - Backend supports server-side "contains" filters for: electronicId, accountNumber, address, route
+// - Everything else (and ops not supported by backend) is applied client-side on the current page of results.
+// - Sorting: uses backend sort for allowed fields; falls back to client-side sort if needed.
+// - Filters panel remains collapsible; sort dropdown removed to save space.
+// - Missing chips still auto-apply.
+// - Assignment toolbar stays above the table.
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import "./MetersPage.css";
 import { Link, useNavigate } from "react-router-dom";
-import { listMetersApi } from "../api/meters.api";
+import { listMetersQuickApi } from "../api/meters.api";
 import {
   listAssignableTechsApi,
   postAssignments,
@@ -24,22 +25,32 @@ import { SuccessBanner } from "../components/SuccessBanner";
 import { useAuth } from "../auth/AuthContext";
 import { getEntityId } from "../api/apiClient";
 
-// Keep frontend options aligned with backend
+/** Backend-known sortable fields (from your meters.routes.js) */
 const SORT_FIELDS = [
-  { key: "electronicId", label: "electronicId" },
-  { key: "accountNumber", label: "accountNumber" },
-  { key: "address", label: "address" },
-  { key: "route", label: "route" },
-  { key: "customerName", label: "customerName" },
-  { key: "meterSerialNumber", label: "meterSerialNumber" },
-  { key: "meterSize", label: "meterSize" },
-  { key: "numberOfPictures", label: "numberOfPictures" },
-  { key: "lastApprovedUpdateAt", label: "lastApprovedUpdateAt" },
-  { key: "createdAt", label: "createdAt" },
-  { key: "updatedAt", label: "updatedAt" },
+  { key: "electronicId", label: "Electronic ID" },
+  { key: "accountNumber", label: "Account #" },
+  { key: "address", label: "Address" },
+  { key: "route", label: "Route" },
+  { key: "customerName", label: "Customer" },
+  { key: "meterSerialNumber", label: "Serial #" },
+  { key: "meterSize", label: "Meter Size" },
+  { key: "numberOfPictures", label: "# Pics" },
+  { key: "lastApprovedUpdateAt", label: "Last Approved" },
+  { key: "createdAt", label: "Created" },
+  { key: "updatedAt", label: "Updated" },
 ];
 
-// Missing chips (auto-apply)
+const SORTABLE_SET = new Set(SORT_FIELDS.map((x) => x.key));
+
+/** Backend-supported per-column contains filters */
+const SERVER_CONTAINS_FILTERS = new Set([
+  "electronicId",
+  "accountNumber",
+  "address",
+  "route",
+]);
+
+/** Missing chips (auto-apply) */
 const MISSING_CHIPS = [
   { key: "any", label: "Any missing" },
   { key: "latlng", label: "Missing lat/lng" },
@@ -82,19 +93,239 @@ function serializeMissing(set) {
 function toggleMissingChip(currentMissing, key) {
   const set = parseMissing(currentMissing);
 
-  // "any" behaves like a single-select toggle
   if (key === "any") {
     return set.has("any") ? "" : "any";
   }
 
-  // Selecting a specific one removes "any"
   if (set.has("any")) set.delete("any");
 
-  // Toggle specific key
   if (set.has(key)) set.delete(key);
   else set.add(key);
 
   return serializeMissing(set);
+}
+
+/** ---------- Header filter helpers ---------- */
+
+const FILTER_OPS = [
+  { key: "contains", label: "contains" },
+  { key: "not_contains", label: "not contains" },
+  { key: "blank", label: "blank" },
+  { key: "not_blank", label: "not blank" },
+];
+
+function normalizeStr(v) {
+  if (v === null || v === undefined) return "";
+  return String(v);
+}
+
+function isBlankValue(v) {
+  if (v === null || v === undefined) return true;
+  if (typeof v === "number") return Number.isNaN(v); // rare
+  const s = String(v).trim();
+  return s.length === 0;
+}
+
+function containsCI(haystack, needle) {
+  return normalizeStr(haystack)
+    .toLowerCase()
+    .includes(normalizeStr(needle).toLowerCase());
+}
+
+function getColumnValue(m, fieldKey) {
+  switch (fieldKey) {
+    case "actions":
+      return "";
+    case "electronicId":
+      return m?.electronicId ?? "";
+    case "accountNumber":
+      return m?.accountNumber ?? "";
+    case "meterSerialNumber":
+      return m?.meterSerialNumber ?? "";
+    case "customerName":
+      return m?.customerName ?? "";
+    case "address":
+      return m?.address ?? "";
+    case "route":
+      return m?.route ?? "";
+    case "latitude":
+      return m?.latitude ?? "";
+    case "longitude":
+      return m?.longitude ?? "";
+    case "meterSize":
+      return m?.meterSize ?? "";
+    case "numberOfPictures":
+      return m?.numberOfPictures ?? "";
+    case "locationNotes":
+      return m?.locationNotes ?? "";
+    case "assignedTo":
+      return m?.assignedTo?.name
+        ? `${m.assignedTo.name} ${m.assignedTo.email || ""}`.trim()
+        : "";
+    case "lastApprovedUpdateAt":
+      return m?.lastApprovedUpdateAt ?? "";
+    case "createdAt":
+      return m?.createdAt ?? "";
+    case "updatedAt":
+      return m?.updatedAt ?? "";
+    default:
+      return m?.[fieldKey] ?? "";
+  }
+}
+
+function applyOpToValue(op, value, q) {
+  if (op === "blank") return isBlankValue(value);
+  if (op === "not_blank") return !isBlankValue(value);
+
+  // contains / not_contains
+  const hit = containsCI(value, q);
+  if (op === "contains") return hit;
+  if (op === "not_contains") return !hit;
+
+  return true;
+}
+
+function isActiveHeaderFilter(f) {
+  if (!f) return false;
+  if (f.op === "blank" || f.op === "not_blank") return true;
+  return Boolean(String(f.value || "").trim());
+}
+
+/** Small popover used in the table header */
+function HeaderFilterPopover({
+  fieldKey,
+  label,
+  value,
+  onChange,
+  onClear,
+  disabled,
+}) {
+  const wrapRef = useRef(null);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    function onDoc(e) {
+      if (!wrapRef.current) return;
+      if (!wrapRef.current.contains(e.target)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, []);
+
+  const active = isActiveHeaderFilter(value);
+
+  return (
+    <span
+      ref={wrapRef}
+      className="th-wrap"
+      style={{
+        position: "relative",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+      }}
+    >
+      <button
+        type="button"
+        className="th-filter-btn"
+        disabled={disabled}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setOpen((s) => !s);
+        }}
+        title={active ? `Filter active on ${label}` : `Filter ${label}`}
+        style={{
+          border: "1px solid rgba(255,255,255,0.18)",
+          background: active
+            ? "rgba(78,161,255,0.18)"
+            : "rgba(255,255,255,0.06)",
+          color: "rgba(255,255,255,0.9)",
+          borderRadius: 10,
+          padding: "2px 6px",
+          fontSize: 12,
+          cursor: "pointer",
+        }}
+      >
+        ⌕
+      </button>
+
+      {open ? (
+        <div
+          className="card th-filter-pop"
+          style={{
+            position: "absolute",
+            top: "calc(100% + 6px)",
+            right: 0,
+            zIndex: 40,
+            width: 240,
+            padding: 10,
+            background: "rgba(10,18,35,0.98)",
+            border: "1px solid rgba(255,255,255,0.12)",
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div style={{ fontWeight: 800, marginBottom: 8 }}>{label} filter</div>
+
+          <label className="field" style={{ marginBottom: 8 }}>
+            <div className="field-label">Operator</div>
+            <select
+              className="input"
+              disabled={disabled}
+              value={value?.op || "contains"}
+              onChange={(e) => onChange({ ...value, op: e.target.value })}
+            >
+              {FILTER_OPS.map((o) => (
+                <option key={o.key} value={o.key}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {value?.op === "blank" || value?.op === "not_blank" ? null : (
+            <label className="field" style={{ marginBottom: 8 }}>
+              <div className="field-label">Value</div>
+              <input
+                className="input"
+                disabled={disabled}
+                value={value?.value || ""}
+                onChange={(e) => onChange({ ...value, value: e.target.value })}
+                placeholder="type…"
+              />
+            </label>
+          )}
+
+          <div className="row" style={{ gap: 8, justifyContent: "flex-end" }}>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => {
+                onClear();
+                setOpen(false);
+              }}
+              disabled={disabled}
+            >
+              Clear
+            </button>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setOpen(false)}
+              disabled={disabled}
+            >
+              Done
+            </button>
+          </div>
+
+          <div className="muted" style={{ fontSize: 11, marginTop: 8 }}>
+            Tip: non-“contains” filters are applied on the current page (limit
+            up to 200).
+          </div>
+        </div>
+      ) : null}
+    </span>
+  );
 }
 
 export function MetersPage() {
@@ -105,11 +336,21 @@ export function MetersPage() {
   const scopeKey = user?.activeCompanyId || user?.companyId || "noscope";
   const canAssign = role === "admin" || role === "superadmin";
 
-  // Apply-based filtering (no fetch-on-type) EXCEPT Missing chips which auto-apply
+  // Collapsible filters state (remembered)
+  const [filtersOpen, setFiltersOpen] = useState(() => {
+    const v = localStorage.getItem("metersFiltersOpen");
+    return v ? v === "1" : false;
+  });
+  useEffect(() => {
+    localStorage.setItem("metersFiltersOpen", filtersOpen ? "1" : "0");
+  }, [filtersOpen]);
+
+  // Panel form (Apply-based) — keep minimal (global q is optional since you moved global search to AppLayout)
   const [form, setForm] = useState(() => ({
     q: "",
     limit: 50,
     missing: "",
+    // keep these for server-side contains filters if you want to still use panel fields
     electronicId: "",
     accountNumber: "",
     address: "",
@@ -119,6 +360,22 @@ export function MetersPage() {
   }));
 
   const [applied, setApplied] = useState(() => ({ ...form }));
+
+  // Header filters: fieldKey -> { op, value }
+  const [headerFilters, setHeaderFilters] = useState(() => ({
+    electronicId: { op: "contains", value: "" },
+    accountNumber: { op: "contains", value: "" },
+    meterSerialNumber: { op: "contains", value: "" },
+    customerName: { op: "contains", value: "" },
+    address: { op: "contains", value: "" },
+    route: { op: "contains", value: "" },
+    latitude: { op: "contains", value: "" },
+    longitude: { op: "contains", value: "" },
+    meterSize: { op: "contains", value: "" },
+    numberOfPictures: { op: "contains", value: "" },
+    locationNotes: { op: "contains", value: "" },
+    assignedTo: { op: "contains", value: "" },
+  }));
 
   const [page, setPage] = useState(1);
   const [highlightWindow, setHighlightWindow] = useState("24h");
@@ -137,7 +394,7 @@ export function MetersPage() {
   const [assignLoading, setAssignLoading] = useState(false);
   const [success, setSuccess] = useState("");
 
-  const meters = useMemo(() => payload?.meters || [], [payload]);
+  const metersRaw = useMemo(() => payload?.meters || [], [payload]);
 
   const total = payload?.count ?? 0;
   const limit = payload?.limit ?? applied.limit ?? 50;
@@ -145,29 +402,6 @@ export function MetersPage() {
 
   const startIndex = total === 0 ? 0 : (currentPage - 1) * limit + 1;
   const endIndex = total === 0 ? 0 : Math.min(currentPage * limit, total);
-
-  const hasFiltersApplied = Boolean(
-    applied.q ||
-    applied.missing ||
-    applied.electronicId ||
-    applied.accountNumber ||
-    applied.address ||
-    applied.route,
-  );
-
-  const pageMeterIds = useMemo(() => {
-    return meters.map((m) => getEntityId(m)).filter(Boolean);
-  }, [meters]);
-
-  const selectedCount = selectedIds.size;
-
-  const allOnPageSelected = useMemo(() => {
-    if (pageMeterIds.length === 0) return false;
-    for (const id of pageMeterIds) {
-      if (!selectedIds.has(id)) return false;
-    }
-    return true;
-  }, [pageMeterIds, selectedIds]);
 
   function isRecentApproved(meter) {
     const ms = windowMs(highlightWindow);
@@ -192,28 +426,6 @@ export function MetersPage() {
     applyNow({ ...form });
   }
 
-  function toggleSort(field) {
-    // Guard: ensure we only sort by backend-supported fields
-    const allowed = SORT_FIELDS.some((f) => f.key === field);
-    if (!allowed) return;
-
-    const nextDir =
-      applied.sortBy === field
-        ? applied.sortDir === "asc"
-          ? "desc"
-          : "asc"
-        : "asc";
-
-    const next = { ...applied, sortBy: field, sortDir: nextDir };
-    setForm((f) => ({ ...f, sortBy: field, sortDir: nextDir }));
-    applyNow(next);
-  }
-
-  function sortGlyph(field) {
-    if (applied.sortBy !== field) return "";
-    return applied.sortDir === "asc" ? " ▲" : " ▼";
-  }
-
   function toggleRowSelection(id) {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -222,6 +434,20 @@ export function MetersPage() {
       return next;
     });
   }
+
+  const pageMeterIds = useMemo(() => {
+    return metersRaw.map((m) => getEntityId(m)).filter(Boolean);
+  }, [metersRaw]);
+
+  const selectedCount = selectedIds.size;
+
+  const allOnPageSelected = useMemo(() => {
+    if (pageMeterIds.length === 0) return false;
+    for (const id of pageMeterIds) {
+      if (!selectedIds.has(id)) return false;
+    }
+    return true;
+  }, [pageMeterIds, selectedIds]);
 
   function toggleSelectAllOnPage() {
     setSelectedIds((prev) => {
@@ -253,27 +479,52 @@ export function MetersPage() {
     };
     setForm(reset);
     applyNow(reset);
+
+    // Clear header filters too
+    setHeaderFilters((prev) => {
+      const next = { ...prev };
+      for (const k of Object.keys(next)) {
+        next[k] = { ...next[k], value: "", op: next[k]?.op || "contains" };
+      }
+      return next;
+    });
   }
 
-  function clearOneFilter(key) {
-    const next = { ...form };
-    if (key === "q") next.q = "";
-    if (key === "missing") next.missing = "";
-    if (key === "electronicId") next.electronicId = "";
-    if (key === "accountNumber") next.accountNumber = "";
-    if (key === "address") next.address = "";
-    if (key === "route") next.route = "";
+  function stopSummaryToggle(e) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
 
-    setForm(next);
+  /** Sorting: click column header toggles asc/desc */
+  function toggleSort(field) {
+    if (!field) return;
+
+    const nextDir =
+      applied.sortBy === field
+        ? applied.sortDir === "asc"
+          ? "desc"
+          : "asc"
+        : "asc";
+
+    const next = { ...applied, sortBy: field, sortDir: nextDir };
+    setForm((f) => ({ ...f, sortBy: field, sortDir: nextDir }));
     applyNow(next);
   }
 
+  function sortGlyph(field) {
+    if (applied.sortBy !== field) return "";
+    return applied.sortDir === "asc" ? " ▲" : " ▼";
+  }
+
+  /** Build pills for panel + header filters */
   const filterPills = useMemo(() => {
     const pills = [];
+
     if (applied.missing)
       pills.push({ key: "missing", label: `Missing: ${applied.missing}` });
-    if (applied.route)
-      pills.push({ key: "route", label: `Route: ${applied.route}` });
+    if (applied.q) pills.push({ key: "q", label: `q: ${applied.q}` });
+
+    // Panel column filters (server)
     if (applied.electronicId)
       pills.push({
         key: "electronicId",
@@ -286,9 +537,66 @@ export function MetersPage() {
       });
     if (applied.address)
       pills.push({ key: "address", label: `Address: ${applied.address}` });
-    if (applied.q) pills.push({ key: "q", label: `q: ${applied.q}` });
+    if (applied.route)
+      pills.push({ key: "route", label: `Route: ${applied.route}` });
+
+    // Header filters
+    for (const [field, f] of Object.entries(headerFilters)) {
+      if (!isActiveHeaderFilter(f)) continue;
+
+      const label =
+        field === "meterSerialNumber"
+          ? "Serial #"
+          : field === "customerName"
+            ? "Customer"
+            : field === "locationNotes"
+              ? "Notes"
+              : field === "numberOfPictures"
+                ? "# Pics"
+                : field === "assignedTo"
+                  ? "Assigned"
+                  : field;
+
+      const op = f.op === "not_contains" ? "not contains" : f.op;
+
+      const pillText =
+        f.op === "blank" || f.op === "not_blank"
+          ? `${label}: ${op}`
+          : `${label}: ${op} "${f.value}"`;
+
+      pills.push({ key: `hf:${field}`, label: pillText, hfField: field });
+    }
+
     return pills;
-  }, [applied]);
+  }, [applied, headerFilters]);
+
+  function clearOnePill(pill) {
+    // Header filter pill?
+    if (pill?.hfField) {
+      const field = pill.hfField;
+      setHeaderFilters((prev) => ({
+        ...prev,
+        [field]: {
+          ...(prev[field] || { op: "contains", value: "" }),
+          value: "",
+          op: "contains",
+        },
+      }));
+      return;
+    }
+
+    // Panel pills
+    const next = { ...form };
+    if (pill.key === "q") next.q = "";
+    if (pill.key === "missing") next.missing = "";
+    if (pill.key === "electronicId") next.electronicId = "";
+    if (pill.key === "accountNumber") next.accountNumber = "";
+    if (pill.key === "address") next.address = "";
+    if (pill.key === "route") next.route = "";
+
+    setForm(next);
+    applyNow(next);
+  }
 
   // Clear selection when company scope changes
   useEffect(() => {
@@ -299,7 +607,7 @@ export function MetersPage() {
     setPage(1);
   }, [scopeKey]);
 
-  // Esc clears error banner (small UX polish)
+  // Esc clears error banner
   useEffect(() => {
     function onKeyDown(e) {
       if (e.key === "Escape") setError(null);
@@ -315,16 +623,33 @@ export function MetersPage() {
       setError(null);
 
       try {
-        const data = await listMetersApi({
+        // Merge server-side column filters:
+        // - We always send panel filters as-is (contains).
+        // - We ALSO send header filters only when:
+        //   - op === "contains"
+        //   - and field is one of the backend-supported contains params
+        const serverParams = {
           page,
           ...applied,
+          includeAssignments: canAssign ? 1 : 0,
           q: applied.q || undefined,
           missing: applied.missing || undefined,
           electronicId: applied.electronicId || undefined,
           accountNumber: applied.accountNumber || undefined,
           address: applied.address || undefined,
           route: applied.route || undefined,
-        });
+        };
+
+        for (const [field, f] of Object.entries(headerFilters)) {
+          if (!f) continue;
+          if (f.op !== "contains") continue;
+          if (!SERVER_CONTAINS_FILTERS.has(field)) continue;
+          const v = String(f.value || "").trim();
+          if (!v) continue;
+          serverParams[field] = v;
+        }
+
+        const data = await listMetersQuickApi(serverParams);
         setPayload(data);
       } catch (e) {
         if (
@@ -342,7 +667,7 @@ export function MetersPage() {
     }
 
     load();
-  }, [page, applied, role, nav]);
+  }, [page, applied, role, nav, canAssign, headerFilters]);
 
   // Load techs for assignment toolbar
   useEffect(() => {
@@ -392,227 +717,236 @@ export function MetersPage() {
     }
   }
 
+  /** Client-side filtering for header filters */
+  const metersFiltered = useMemo(() => {
+    let out = metersRaw;
+
+    const active = Object.entries(headerFilters).filter(([, f]) =>
+      isActiveHeaderFilter(f),
+    );
+    if (active.length === 0) return out;
+
+    out = out.filter((m) => {
+      for (const [field, f] of active) {
+        const val = getColumnValue(m, field);
+        const q = f.op === "blank" || f.op === "not_blank" ? "" : f.value || "";
+        const ok = applyOpToValue(f.op, val, q);
+        if (!ok) return false;
+      }
+      return true;
+    });
+
+    return out;
+  }, [metersRaw, headerFilters]);
+
+  /** Client-side sort fallback (only if someone clicks a non-backend sort) */
+  const metersFinal = useMemo(() => {
+    const sortBy = applied.sortBy;
+    const sortDir = applied.sortDir;
+
+    // If backend can sort it, it already did; return as-is.
+    if (SORTABLE_SET.has(sortBy)) return metersFiltered;
+
+    // Fallback: sort locally
+    const copy = [...metersFiltered];
+    copy.sort((a, b) => {
+      const av = normalizeStr(getColumnValue(a, sortBy));
+      const bv = normalizeStr(getColumnValue(b, sortBy));
+      const cmp = av.localeCompare(bv, undefined, {
+        numeric: true,
+        sensitivity: "base",
+      });
+      return sortDir === "desc" ? -cmp : cmp;
+    });
+    return copy;
+  }, [metersFiltered, applied.sortBy, applied.sortDir]);
+
+  const hasFiltersApplied = filterPills.length > 0;
+
   return (
     <div className="stack">
-      {/* ---------- FILTER CARD ---------- */}
-      <div className="card meters-filter-panel">
-        <div className="row space-between">
-          <div>
-            <div className="h1">Meters</div>
-            <div className="muted">
-              Uses <code>GET /api/meters</code>. Highlight uses{" "}
-              <code>meter.lastApprovedUpdateAt</code>.
+      {/* ---------- COLLAPSIBLE FILTER PANEL ---------- */}
+      <details
+        className="card meters-filter-panel filters"
+        open={filtersOpen}
+        onToggle={(e) => setFiltersOpen(e.currentTarget.open)}
+      >
+        <summary className="filters-summary">
+          <div className="filters-summary-left">
+            <div className="filters-title">Meters</div>
+
+            <div className="filters-chips">
+              {filterPills.length ? (
+                <>
+                  {filterPills.slice(0, 3).map((p, i) => (
+                    <span className="pill pill-static" key={`${p.key}-${i}`}>
+                      {p.label}
+                    </span>
+                  ))}
+                  {filterPills.length > 3 ? (
+                    <span className="pill pill-static">
+                      +{filterPills.length - 3} more
+                    </span>
+                  ) : null}
+                </>
+              ) : (
+                <span className="muted">No filters applied</span>
+              )}
             </div>
           </div>
-        </div>
 
-        {/* Filters */}
-        <div className="grid grid-3" style={{ marginTop: 12 }}>
-          <label className="field">
-            <div className="field-label">Global search (q)</div>
-            <input
-              className="input"
-              value={form.q}
-              onChange={(e) => setForm((f) => ({ ...f, q: e.target.value }))}
+          <div className="filters-summary-right" onClick={stopSummaryToggle}>
+            <button
+              type="button"
+              className="btn"
+              onClick={onApplyClicked}
               disabled={loading}
-              placeholder="Search across EID, acct, serial, customer, address, route"
-            />
-          </label>
+              title="Apply current filter form"
+            >
+              Apply
+            </button>
 
-          {/* Missing chips (AUTO APPLY) */}
-          <div className="field">
-            <div className="field-label">Missing</div>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={clearFilters}
+              disabled={loading}
+              title="Reset filters"
+            >
+              Clear
+            </button>
 
-            <div className="chips">
-              {MISSING_CHIPS.map((c) => {
-                const set = parseMissing(form.missing);
-                const active = set.has(c.key);
+            <span className="filters-caret" aria-hidden="true">
+              ▾
+            </span>
+          </div>
+        </summary>
 
-                return (
+        <div className="filters-body">
+          <div className="grid grid-3" style={{ marginTop: 12 }}>
+            <label className="field">
+              <div className="field-label">Meters page search (optional)</div>
+              <input
+                className="input"
+                value={form.q}
+                onChange={(e) => setForm((f) => ({ ...f, q: e.target.value }))}
+                disabled={loading}
+                placeholder="Search across EID, acct, serial, customer, address, route"
+              />
+              <div className="field-hint">
+                (Your global search is in AppLayout — this is for bulk ops.)
+              </div>
+            </label>
+
+            {/* Missing chips (AUTO APPLY) */}
+            <div className="field">
+              <div className="field-label">Missing</div>
+
+              <div className="chips">
+                {MISSING_CHIPS.map((c) => {
+                  const set = parseMissing(form.missing);
+                  const active = set.has(c.key);
+
+                  return (
+                    <button
+                      key={c.key}
+                      type="button"
+                      className={`chip chip-${c.key} ${active ? "chip-active" : ""}`}
+                      disabled={loading}
+                      onClick={() => {
+                        const nextMissing = toggleMissingChip(
+                          form.missing,
+                          c.key,
+                        );
+                        const next = { ...form, missing: nextMissing };
+                        setForm(next);
+                        applyNow(next);
+                      }}
+                      title="Click to apply immediately"
+                    >
+                      {c.label}
+                    </button>
+                  );
+                })}
+
+                {form.missing ? (
                   <button
-                    key={c.key}
                     type="button"
-                    className={`chip chip-${c.key} ${active ? "chip-active" : ""}`}
+                    className="chip chip-clear"
                     disabled={loading}
                     onClick={() => {
-                      const nextMissing = toggleMissingChip(
-                        form.missing,
-                        c.key,
-                      );
-                      const next = { ...form, missing: nextMissing };
+                      const next = { ...form, missing: "" };
                       setForm(next);
                       applyNow(next);
                     }}
-                    title="Click to apply immediately"
                   >
-                    {c.label}
+                    Clear
                   </button>
-                );
-              })}
+                ) : null}
+              </div>
 
-              {form.missing ? (
-                <button
-                  type="button"
-                  className="chip chip-clear"
-                  disabled={loading}
-                  onClick={() => {
-                    const next = { ...form, missing: "" };
-                    setForm(next);
-                    applyNow(next);
-                  }}
-                >
-                  Clear
-                </button>
-              ) : null}
+              <div className="field-hint missing-hint">
+                Tip: “Any missing” is OR. Specific chips combine with AND.
+              </div>
             </div>
 
-            <div className="field-hint missing-hint">
-              Tip: “Any missing” is OR across fields. Specific chips combine
-              with AND.
-            </div>
+            <label className="field">
+              <div className="field-label">Limit</div>
+              <input
+                className="input"
+                type="number"
+                min={1}
+                max={200}
+                value={form.limit}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    limit: Number(e.target.value) || 50,
+                  }))
+                }
+                disabled={loading}
+              />
+              <div className="field-hint">Max 200</div>
+            </label>
           </div>
 
-          <label className="field">
-            <div className="field-label">Limit</div>
-            <input
-              className="input"
-              type="number"
-              min={1}
-              max={200}
-              value={form.limit}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, limit: Number(e.target.value) || 50 }))
-              }
-              disabled={loading}
-            />
-            <div className="field-hint">Max 200</div>
-          </label>
-        </div>
-
-        <div className="grid grid-4" style={{ marginTop: 12 }}>
-          <label className="field">
-            <div className="field-label">Electronic ID</div>
-            <input
-              className="input"
-              value={form.electronicId}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, electronicId: e.target.value }))
-              }
-              disabled={loading}
-            />
-          </label>
-
-          <label className="field">
-            <div className="field-label">Account #</div>
-            <input
-              className="input"
-              value={form.accountNumber}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, accountNumber: e.target.value }))
-              }
-              disabled={loading}
-            />
-          </label>
-
-          <label className="field">
-            <div className="field-label">Address</div>
-            <input
-              className="input"
-              value={form.address}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, address: e.target.value }))
-              }
-              disabled={loading}
-            />
-          </label>
-
-          <label className="field">
-            <div className="field-label">Route</div>
-            <input
-              className="input"
-              value={form.route}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, route: e.target.value }))
-              }
-              disabled={loading}
-            />
-          </label>
-        </div>
-
-        <div className="grid grid-3" style={{ marginTop: 12 }}>
-          <label className="field">
-            <div className="field-label">Highlight recently approved</div>
-            <select
-              className="input"
-              value={highlightWindow}
-              onChange={(e) => setHighlightWindow(e.target.value)}
-              disabled={loading}
-            >
-              <option value="off">off</option>
-              <option value="1h">last 1 hour</option>
-              <option value="24h">last 24 hours</option>
-              <option value="7d">last 7 days</option>
-              <option value="30d">last 30 days</option>
-            </select>
-          </label>
-
-          <label className="field">
-            <div className="field-label">Sort</div>
-            <div className="row">
+          <div className="grid grid-3" style={{ marginTop: 12 }}>
+            <label className="field">
+              <div className="field-label">Highlight recently approved</div>
               <select
                 className="input"
-                value={form.sortBy}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, sortBy: e.target.value }))
-                }
+                value={highlightWindow}
+                onChange={(e) => setHighlightWindow(e.target.value)}
                 disabled={loading}
               >
-                {SORT_FIELDS.map((f) => (
-                  <option key={f.key} value={f.key}>
-                    {f.label}
-                  </option>
-                ))}
+                <option value="off">off</option>
+                <option value="1h">last 1 hour</option>
+                <option value="24h">last 24 hours</option>
+                <option value="7d">last 7 days</option>
+                <option value="30d">last 30 days</option>
               </select>
-              <select
-                className="input"
-                value={form.sortDir}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, sortDir: e.target.value }))
-                }
-                disabled={loading}
-              >
-                <option value="asc">asc</option>
-                <option value="desc">desc</option>
-              </select>
-            </div>
-          </label>
+              <div className="field-hint" />
+            </label>
 
-          <div className="field">
-            <div className="field-label">Actions</div>
-            <div className="meters-actions-row">
-              <button
-                className="btn"
-                onClick={onApplyClicked}
-                disabled={loading}
-              >
-                Apply
-              </button>
-
-              <button
-                className="btn btn-ghost"
-                disabled={loading}
-                onClick={clearFilters}
-              >
-                Clear filters
-              </button>
+            <div className="field">
+              <div className="field-label">Header filters</div>
+              <div className="muted" style={{ paddingTop: 10 }}>
+                Use the <strong>⌕</strong> icon in column headers for contains /
+                not contains / blank / not blank.
+              </div>
+              <div className="field-hint" />
             </div>
 
-            <div className="field-hint">
-              Most filters apply on click Apply. Missing chips apply instantly.
+            <div className="field">
+              <div className="field-label">Sort</div>
+              <div className="muted" style={{ paddingTop: 10 }}>
+                Click column headers to sort (asc/desc).
+              </div>
+              <div className="field-hint" />
             </div>
           </div>
         </div>
-      </div>
+      </details>
 
       <ErrorBanner error={error} onDismiss={() => setError(null)} />
       <SuccessBanner message={success} onDismiss={() => setSuccess("")} />
@@ -627,8 +961,7 @@ export function MetersPage() {
               <div className="toolbar-group">
                 <strong>Assign</strong>
                 <span className="muted">
-                  Selected: <strong>{selectedCount}</strong> (persists across
-                  pages/filters)
+                  Selected: <strong>{selectedCount}</strong>
                 </span>
               </div>
 
@@ -669,15 +1002,15 @@ export function MetersPage() {
             </div>
           ) : null}
 
-          {/* ✅ Pills + meta go ABOVE table/pagination (valid HTML) */}
+          {/* Pills */}
           {filterPills.length ? (
             <div className="pill-row" style={{ marginBottom: 10 }}>
-              {filterPills.map((p) => (
+              {filterPills.map((p, idx) => (
                 <button
-                  key={p.key}
+                  key={`${p.key}-${idx}`}
                   type="button"
                   className="pill"
-                  onClick={() => clearOneFilter(p.key)}
+                  onClick={() => clearOnePill(p)}
                   title="Remove filter"
                   disabled={loading}
                 >
@@ -697,6 +1030,15 @@ export function MetersPage() {
             ) : (
               <span className="muted"> • No filters</span>
             )}
+            {metersFinal.length !== metersRaw.length ? (
+              <span className="muted">
+                {" "}
+                • Header filters matched <strong>
+                  {metersFinal.length}
+                </strong>{" "}
+                on this page
+              </span>
+            ) : null}
           </div>
 
           <Pagination
@@ -710,7 +1052,7 @@ export function MetersPage() {
             }}
           />
 
-          {meters.length === 0 ? (
+          {metersFinal.length === 0 ? (
             <div className="card card-subtle" style={{ marginTop: 12 }}>
               <div className="h2">No meters found</div>
               <div className="muted">
@@ -742,65 +1084,414 @@ export function MetersPage() {
 
                   <th>Actions</th>
 
+                  {/* Electronic ID */}
                   <th
-                    className="th-sort"
+                    className={`sortable ${isActiveHeaderFilter(headerFilters.electronicId) ? "is-filtered" : ""}`}
                     onClick={() => toggleSort("electronicId")}
                   >
-                    Electronic ID{sortGlyph("electronicId")}
+                    <span
+                      className="th-head"
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      Electronic ID{sortGlyph("electronicId")}
+                      <HeaderFilterPopover
+                        fieldKey="electronicId"
+                        label="Electronic ID"
+                        value={headerFilters.electronicId}
+                        disabled={loading}
+                        onChange={(next) =>
+                          setHeaderFilters((p) => ({
+                            ...p,
+                            electronicId: next,
+                          }))
+                        }
+                        onClear={() =>
+                          setHeaderFilters((p) => ({
+                            ...p,
+                            electronicId: { op: "contains", value: "" },
+                          }))
+                        }
+                      />
+                    </span>
                   </th>
 
+                  {/* Account # */}
                   <th
-                    className="th-sort"
+                    className="sortable"
                     onClick={() => toggleSort("accountNumber")}
+                    title="Click to sort"
                   >
-                    Account #{sortGlyph("accountNumber")}
+                    <span
+                      className="th-head"
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      Account #{sortGlyph("accountNumber")}
+                      <HeaderFilterPopover
+                        fieldKey="accountNumber"
+                        label="Account #"
+                        value={headerFilters.accountNumber}
+                        disabled={loading}
+                        onChange={(next) =>
+                          setHeaderFilters((p) => ({
+                            ...p,
+                            accountNumber: next,
+                          }))
+                        }
+                        onClear={() =>
+                          setHeaderFilters((p) => ({
+                            ...p,
+                            accountNumber: { op: "contains", value: "" },
+                          }))
+                        }
+                      />
+                    </span>
                   </th>
 
+                  {/* Serial # */}
                   <th
-                    className="th-sort"
+                    className="sortable"
                     onClick={() => toggleSort("meterSerialNumber")}
+                    title="Click to sort"
                   >
-                    Serial #{sortGlyph("meterSerialNumber")}
+                    <span
+                      className="th-head"
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      Serial #{sortGlyph("meterSerialNumber")}
+                      <HeaderFilterPopover
+                        fieldKey="meterSerialNumber"
+                        label="Serial #"
+                        value={headerFilters.meterSerialNumber}
+                        disabled={loading}
+                        onChange={(next) =>
+                          setHeaderFilters((p) => ({
+                            ...p,
+                            meterSerialNumber: next,
+                          }))
+                        }
+                        onClear={() =>
+                          setHeaderFilters((p) => ({
+                            ...p,
+                            meterSerialNumber: { op: "contains", value: "" },
+                          }))
+                        }
+                      />
+                    </span>
                   </th>
 
+                  {/* Customer */}
                   <th
-                    className="th-sort"
+                    className="sortable"
                     onClick={() => toggleSort("customerName")}
+                    title="Click to sort"
                   >
-                    Customer{sortGlyph("customerName")}
+                    <span
+                      className="th-head"
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      Customer{sortGlyph("customerName")}
+                      <HeaderFilterPopover
+                        fieldKey="customerName"
+                        label="Customer"
+                        value={headerFilters.customerName}
+                        disabled={loading}
+                        onChange={(next) =>
+                          setHeaderFilters((p) => ({
+                            ...p,
+                            customerName: next,
+                          }))
+                        }
+                        onClear={() =>
+                          setHeaderFilters((p) => ({
+                            ...p,
+                            customerName: { op: "contains", value: "" },
+                          }))
+                        }
+                      />
+                    </span>
                   </th>
 
-                  <th className="th-sort" onClick={() => toggleSort("address")}>
-                    Address{sortGlyph("address")}
+                  {/* Address */}
+                  <th
+                    className="sortable"
+                    onClick={() => toggleSort("address")}
+                    title="Click to sort"
+                  >
+                    <span
+                      className="th-head"
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      Address{sortGlyph("address")}
+                      <HeaderFilterPopover
+                        fieldKey="address"
+                        label="Address"
+                        value={headerFilters.address}
+                        disabled={loading}
+                        onChange={(next) =>
+                          setHeaderFilters((p) => ({ ...p, address: next }))
+                        }
+                        onClear={() =>
+                          setHeaderFilters((p) => ({
+                            ...p,
+                            address: { op: "contains", value: "" },
+                          }))
+                        }
+                      />
+                    </span>
                   </th>
 
-                  <th className="th-sort" onClick={() => toggleSort("route")}>
-                    Route{sortGlyph("route")}
+                  {/* Route */}
+                  <th
+                    className="sortable"
+                    onClick={() => toggleSort("route")}
+                    title="Click to sort"
+                  >
+                    <span
+                      className="th-head"
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      Route{sortGlyph("route")}
+                      <HeaderFilterPopover
+                        fieldKey="route"
+                        label="Route"
+                        value={headerFilters.route}
+                        disabled={loading}
+                        onChange={(next) =>
+                          setHeaderFilters((p) => ({ ...p, route: next }))
+                        }
+                        onClear={() =>
+                          setHeaderFilters((p) => ({
+                            ...p,
+                            route: { op: "contains", value: "" },
+                          }))
+                        }
+                      />
+                    </span>
                   </th>
 
-                  <th>Lat</th>
-                  <th>Lng</th>
+                  {/* Lat / Lng */}
+                  <th
+                    title="Click to sort"
+                    className="sortable"
+                    onClick={() => toggleSort("latitude")}
+                  >
+                    <span
+                      className="th-head"
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      Lat{sortGlyph("latitude")}
+                      <HeaderFilterPopover
+                        fieldKey="latitude"
+                        label="Lat"
+                        value={headerFilters.latitude}
+                        disabled={loading}
+                        onChange={(next) =>
+                          setHeaderFilters((p) => ({ ...p, latitude: next }))
+                        }
+                        onClear={() =>
+                          setHeaderFilters((p) => ({
+                            ...p,
+                            latitude: { op: "contains", value: "" },
+                          }))
+                        }
+                      />
+                    </span>
+                  </th>
 
                   <th
-                    className="th-sort"
+                    title="Click to sort"
+                    className="sortable"
+                    onClick={() => toggleSort("longitude")}
+                  >
+                    <span
+                      className="th-head"
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      Lng{sortGlyph("longitude")}
+                      <HeaderFilterPopover
+                        fieldKey="longitude"
+                        label="Lng"
+                        value={headerFilters.longitude}
+                        disabled={loading}
+                        onChange={(next) =>
+                          setHeaderFilters((p) => ({ ...p, longitude: next }))
+                        }
+                        onClear={() =>
+                          setHeaderFilters((p) => ({
+                            ...p,
+                            longitude: { op: "contains", value: "" },
+                          }))
+                        }
+                      />
+                    </span>
+                  </th>
+
+                  {/* Meter Size */}
+                  <th
+                    className="sortable"
                     onClick={() => toggleSort("meterSize")}
+                    title="Click to sort"
                   >
-                    Meter Size{sortGlyph("meterSize")}
+                    <span
+                      className="th-head"
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      Meter Size{sortGlyph("meterSize")}
+                      <HeaderFilterPopover
+                        fieldKey="meterSize"
+                        label="Meter Size"
+                        value={headerFilters.meterSize}
+                        disabled={loading}
+                        onChange={(next) =>
+                          setHeaderFilters((p) => ({ ...p, meterSize: next }))
+                        }
+                        onClear={() =>
+                          setHeaderFilters((p) => ({
+                            ...p,
+                            meterSize: { op: "contains", value: "" },
+                          }))
+                        }
+                      />
+                    </span>
                   </th>
 
+                  {/* # Pics */}
                   <th
-                    className="th-sort"
+                    className="sortable"
                     onClick={() => toggleSort("numberOfPictures")}
+                    title="Click to sort"
                   >
-                    # Pics{sortGlyph("numberOfPictures")}
+                    <span
+                      className="th-head"
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      # Pics{sortGlyph("numberOfPictures")}
+                      <HeaderFilterPopover
+                        fieldKey="numberOfPictures"
+                        label="# Pics"
+                        value={headerFilters.numberOfPictures}
+                        disabled={loading}
+                        onChange={(next) =>
+                          setHeaderFilters((p) => ({
+                            ...p,
+                            numberOfPictures: next,
+                          }))
+                        }
+                        onClear={() =>
+                          setHeaderFilters((p) => ({
+                            ...p,
+                            numberOfPictures: { op: "contains", value: "" },
+                          }))
+                        }
+                      />
+                    </span>
                   </th>
 
-                  <th>Notes</th>
+                  {/* Notes */}
+                  <th title="Notes">
+                    <span
+                      className="th-head"
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      Notes
+                      <HeaderFilterPopover
+                        fieldKey="locationNotes"
+                        label="Notes"
+                        value={headerFilters.locationNotes}
+                        disabled={loading}
+                        onChange={(next) =>
+                          setHeaderFilters((p) => ({
+                            ...p,
+                            locationNotes: next,
+                          }))
+                        }
+                        onClear={() =>
+                          setHeaderFilters((p) => ({
+                            ...p,
+                            locationNotes: { op: "contains", value: "" },
+                          }))
+                        }
+                      />
+                    </span>
+                  </th>
+
+                  {/* Assigned To */}
+                  <th title="Assigned">
+                    <span
+                      className="th-head"
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      Assigned To
+                      <HeaderFilterPopover
+                        fieldKey="assignedTo"
+                        label="Assigned"
+                        value={headerFilters.assignedTo}
+                        disabled={loading}
+                        onChange={(next) =>
+                          setHeaderFilters((p) => ({ ...p, assignedTo: next }))
+                        }
+                        onClear={() =>
+                          setHeaderFilters((p) => ({
+                            ...p,
+                            assignedTo: { op: "contains", value: "" },
+                          }))
+                        }
+                      />
+                    </span>
+                  </th>
                 </tr>
               </thead>
 
               <tbody>
-                {meters.map((m, idx) => {
+                {metersFinal.map((m, idx) => {
                   const mid = getEntityId(m);
                   const rowKey = mid || String(idx);
                   const selected = mid ? selectedIds.has(mid) : false;
@@ -826,17 +1517,13 @@ export function MetersPage() {
                         </td>
                       ) : null}
 
-                      {/* ✅ User-facing Actions (no raw id shown) */}
                       <td>
                         {mid ? (
                           <div className="row" style={{ gap: 10 }}>
-                            <Link to={`/meters/${encodeURIComponent(mid)}`}>
-                              View
-                            </Link>
                             <Link
                               to={`/meters/${encodeURIComponent(mid)}/updates`}
                             >
-                              Updates
+                              Update
                             </Link>
                           </div>
                         ) : (
@@ -844,7 +1531,16 @@ export function MetersPage() {
                         )}
                       </td>
 
-                      <td>{m?.electronicId ?? ""}</td>
+                      <td>
+                        {mid ? (
+                          <Link to={`/meters/${encodeURIComponent(mid)}`}>
+                            {m?.electronicId ?? "—"}
+                          </Link>
+                        ) : (
+                          (m?.electronicId ?? "—")
+                        )}
+                      </td>
+
                       <td>{m?.accountNumber ?? ""}</td>
                       <td>{m?.meterSerialNumber ?? ""}</td>
                       <td>{m?.customerName ?? ""}</td>
@@ -855,6 +1551,19 @@ export function MetersPage() {
                       <td>{m?.meterSize ?? ""}</td>
                       <td>{m?.numberOfPictures ?? ""}</td>
                       <td className="cell-wrap">{m?.locationNotes ?? ""}</td>
+
+                      <td className="assigned-wrap">
+                        {m?.assignedTo?.name ? (
+                          <>
+                            <div>{m.assignedTo.name}</div>
+                            <div className="muted" style={{ fontSize: 12 }}>
+                              {m.assignedTo.email}
+                            </div>
+                          </>
+                        ) : (
+                          <span className="muted">Unassigned</span>
+                        )}
+                      </td>
                     </tr>
                   );
                 })}

@@ -266,7 +266,7 @@ code {
   color: rgba(231, 236, 255, 0.95);
 }
 
-/* ---------- NEW: Meters assignment toolbar + selection styles ---------- */
+/* ---------- Meters assignment toolbar + selection styles ---------- */
 .table-toolbar{
   display:flex;
   align-items:center;
@@ -290,4 +290,43 @@ code {
 .row-selected{
   background: rgba(59,130,246,0.10);
   outline: 1px solid rgba(59,130,246,0.22);
+}
+
+/* Leaflet map support */
+.leaflet-container {
+  border-radius: 14px;
+}
+
+/* Simple modal */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  z-index: 9999;
+}
+
+.modal {
+  width: min(980px, 100%);
+  max-height: 92vh;
+  overflow: auto;
+}
+
+.map-wrap {
+  margin-top: 8px;
+}
+/* Crosshair only for the map inside the picker modal */
+.modal .leaflet-container {
+  cursor: crosshair;
+}
+
+.modal .leaflet-control-container,
+.modal .leaflet-control-container * {
+  cursor: auto;
+}
+a.link {
+  text-decoration: underline;
 }

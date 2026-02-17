@@ -239,12 +239,13 @@ export function UpdateDetailPage() {
             </div>
           </div>
 
-          {/* ✅ Internal fields section only for superadmin */}
           {isSuperadmin && internalFields.length ? (
-            <div className="card">
-              <div className="h2">Internal</div>
+            <details className="card">
+              <summary className="h2" style={{ cursor: "pointer" }}>
+                Debug (internal IDs)
+              </summary>
               <div className="muted" style={{ marginTop: 6 }}>
-                Visible only to superadmin (support/debug).
+                Collapsed by default to keep the page customer-facing.
               </div>
 
               <div className="grid grid-3" style={{ marginTop: 12 }}>
@@ -255,7 +256,7 @@ export function UpdateDetailPage() {
                   </div>
                 ))}
               </div>
-            </div>
+            </details>
           ) : null}
         </>
       ) : null}

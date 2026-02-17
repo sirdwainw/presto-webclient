@@ -8,6 +8,7 @@ import {
   techWorkloadApi,
   techSummaryApi,
 } from "../api/reports.api";
+import { getEntityId } from "../api/apiClient";
 
 function KpiTile({ label, value, hint, to }) {
   const inner = (
@@ -242,7 +243,6 @@ export function DashboardPage() {
                 to="/tech/updates?status=all"
               />
             </div>
-
             <div className="card">
               <div className="h2">Recent updates</div>
               <div className="muted">Last 10 updates (most recent first)</div>
@@ -251,25 +251,53 @@ export function DashboardPage() {
                 <table className="table">
                   <thead>
                     <tr>
-                      <th>Update ID</th>
-                      <th>Meter ID</th>
+                      <th>Update</th>
+                      <th>Meter</th>
                       <th>Status</th>
                       <th>Created</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {(techSummary.recentUpdates || []).map((u, idx) => (
-                      <tr key={u._id || idx}>
-                        <td>
-                          <code>{String(u._id)}</code>
-                        </td>
-                        <td>
-                          <code>{String(u.meterId)}</code>
-                        </td>
-                        <td>{String(u.status)}</td>
-                        <td>{new Date(u.createdAt).toLocaleString()}</td>
-                      </tr>
-                    ))}
+                    {(techSummary.recentUpdates || []).map((u, idx) => {
+                      const updateId = getEntityId(u);
+                      const meterId =
+                        typeof u?.meterId === "string"
+                          ? u.meterId
+                          : getEntityId(u?.meterId) || "";
+
+                      return (
+                        <tr key={updateId || idx}>
+                          <td>
+                            {updateId ? (
+                              <Link
+                                to={`/updates/${encodeURIComponent(updateId)}`}
+                              >
+                                Details
+                              </Link>
+                            ) : (
+                              "—"
+                            )}
+                          </td>
+                          <td>
+                            {meterId ? (
+                              <Link
+                                to={`/meters/${encodeURIComponent(meterId)}`}
+                              >
+                                Meter
+                              </Link>
+                            ) : (
+                              "—"
+                            )}
+                          </td>
+                          <td>{String(u?.status || "")}</td>
+                          <td>
+                            {u?.createdAt
+                              ? new Date(u.createdAt).toLocaleString()
+                              : "—"}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

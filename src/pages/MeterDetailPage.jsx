@@ -325,8 +325,29 @@ export function MeterDetailPage() {
         <div className="card">
           <div className="h2">All Details</div>
           <div className="muted" style={{ marginTop: 6 }}>
-            Internal IDs only appear for <strong>superadmin</strong>.
+            Customer-facing fields only. (Debug IDs available in dropdown for
+            superadmin.)
           </div>
+
+          {isSuperadmin ? (
+            <details style={{ marginTop: 10 }}>
+              <summary className="muted">Debug (internal IDs)</summary>
+              <div className="grid grid-3" style={{ marginTop: 12 }}>
+                <FieldRow
+                  label="System ID"
+                  value={meterId}
+                  copyable={true}
+                  onCopy={(val) => copyToClipboard("System ID", val)}
+                />
+                <FieldRow
+                  label="Company ID"
+                  value={safe(meter?.companyId)}
+                  copyable={true}
+                  onCopy={(val) => copyToClipboard("Company ID", val)}
+                />
+              </div>
+            </details>
+          ) : null}
 
           <div className="grid grid-3" style={{ marginTop: 12 }}>
             {fields.map((f) => (
