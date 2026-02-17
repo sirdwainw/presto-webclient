@@ -2,8 +2,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
-import { quickMetersSearchApi } from "../api/meters.api";
+import { listMetersQuickApi } from "../api/meters.api";
 import { getEntityId } from "../api/apiClient";
+import { globalMeterSearchApi } from "../api/globalSearch.api";
 
 function NavItem({ to, children, end }) {
   return (
@@ -72,7 +73,7 @@ function GlobalMeterSearch() {
       }
       setBusy(true);
       try {
-        const res = await quickMetersSearchApi(dq.trim(), 8);
+        const res = await listMetersQuickApi({ q: dq.trim(), limit: 8 });
         setItems(res?.meters || []);
       } catch (e) {
         setErr(e?.error || "Search failed");
@@ -189,7 +190,7 @@ export function AppLayout() {
           <span className="pill">{role || "unknown"}</span>
         </div>
 
-        {/* ✅ Global search lives here (NOT NavBar.jsx) */}
+       
         <div
           style={{
             marginLeft: 16,

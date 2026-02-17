@@ -22,6 +22,8 @@ export function listMetersApi(params = {}) {
   if (params.sortBy) qs.set("sortBy", String(params.sortBy));
   if (params.sortDir) qs.set("sortDir", String(params.sortDir));
 
+  if (params.includeAssignments) qs.set("includeAssignments", "1");
+  
   const query = qs.toString();
   return apiFetch(`/api/meters${query ? `?${query}` : ""}`, { method: "GET" });
 }
