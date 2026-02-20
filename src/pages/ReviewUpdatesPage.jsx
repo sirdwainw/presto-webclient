@@ -74,7 +74,7 @@ export function ReviewUpdatesPage() {
         e.error.startsWith("No company scope selected") &&
         role === "superadmin"
       ) {
-        nav("/superadmin/context");
+        nav("/settings");
         return;
       }
       setError(e);
@@ -113,7 +113,7 @@ export function ReviewUpdatesPage() {
         e.error.startsWith("No company scope selected") &&
         role === "superadmin"
       ) {
-        nav("/superadmin/context");
+        nav("/settings");
         return;
       }
       setActionError(e);

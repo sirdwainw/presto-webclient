@@ -12,7 +12,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import "./MetersPage.css";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { listMetersQuickApi } from "../api/meters.api";
 import {
   listAssignableTechsApi,
@@ -24,6 +24,7 @@ import { Pagination } from "../components/Pagination";
 import { SuccessBanner } from "../components/SuccessBanner";
 import { useAuth } from "../auth/AuthContext";
 import { getEntityId } from "../api/apiClient";
+import { createPortal } from "react-dom";
 
 /** Backend-known sortable fields (from your meters.routes.js) */
 const SORT_FIELDS = [
@@ -191,7 +192,6 @@ function isActiveHeaderFilter(f) {
   return Boolean(String(f.value || "").trim());
 }
 
-/** Small popover used in the table header */
 function HeaderFilterPopover({
   fieldKey,
   label,
@@ -201,18 +201,91 @@ function HeaderFilterPopover({
   disabled,
 }) {
   const wrapRef = useRef(null);
-  const [open, setOpen] = useState(false);
+  const popRef = useRef(null);
 
-  useEffect(() => {
-    function onDoc(e) {
-      if (!wrapRef.current) return;
-      if (!wrapRef.current.contains(e.target)) setOpen(false);
-    }
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, []);
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+
+  // Local draft so typing doesn't "apply" instantly
+  const [draft, setDraft] = useState(() => ({
+    op: value?.op || "contains",
+    value: value?.value || "",
+  }));
 
   const active = isActiveHeaderFilter(value);
+
+  // When opening (or when upstream value changes), sync draft from value
+  useEffect(() => {
+    if (!open) return;
+    setDraft({
+      op: value?.op || "contains",
+      value: value?.value || "",
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  // Close on outside click (must include portal)
+  useEffect(() => {
+    if (!open) return;
+
+    function onDoc(e) {
+      const t = e.target;
+      const inButtonWrap = wrapRef.current && wrapRef.current.contains(t);
+      const inPopover = popRef.current && popRef.current.contains(t);
+      if (inButtonWrap || inPopover) return;
+      setOpen(false);
+    }
+
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+
+  // Position (relative to the filter button)
+  useEffect(() => {
+    if (!open) return;
+
+    function updatePos() {
+      if (!wrapRef.current) return;
+      const btn = wrapRef.current.querySelector("button");
+      if (!btn) return;
+
+      const r = btn.getBoundingClientRect();
+      const width = 260;
+
+      setPos({
+        top: r.bottom + 8,
+        left: Math.max(8, r.right - width),
+      });
+    }
+
+    updatePos();
+    window.addEventListener("scroll", updatePos, true);
+    window.addEventListener("resize", updatePos);
+    return () => {
+      window.removeEventListener("scroll", updatePos, true);
+      window.removeEventListener("resize", updatePos);
+    };
+  }, [open]);
+
+  function commitAndClose() {
+    // Commit draft to parent
+    const next = { op: draft.op, value: draft.value };
+
+    // For blank/not_blank, ignore value
+    if (next.op === "blank" || next.op === "not_blank") {
+      onChange({ op: next.op, value: "" });
+      setOpen(false);
+      return;
+    }
+
+    onChange(next);
+    setOpen(false);
+  }
+
+  function clearAndClose() {
+    onClear();
+    setOpen(false);
+  }
 
   return (
     <span
@@ -250,80 +323,108 @@ function HeaderFilterPopover({
         ⌕
       </button>
 
-      {open ? (
-        <div
-          className="card th-filter-pop"
-          style={{
-            position: "absolute",
-            top: "calc(100% + 6px)",
-            right: 0,
-            zIndex: 40,
-            width: 240,
-            padding: 10,
-            background: "rgba(10,18,35,0.98)",
-            border: "1px solid rgba(255,255,255,0.12)",
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div style={{ fontWeight: 800, marginBottom: 8 }}>{label} filter</div>
-
-          <label className="field" style={{ marginBottom: 8 }}>
-            <div className="field-label">Operator</div>
-            <select
-              className="input"
-              disabled={disabled}
-              value={value?.op || "contains"}
-              onChange={(e) => onChange({ ...value, op: e.target.value })}
-            >
-              {FILTER_OPS.map((o) => (
-                <option key={o.key} value={o.key}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          {value?.op === "blank" || value?.op === "not_blank" ? null : (
-            <label className="field" style={{ marginBottom: 8 }}>
-              <div className="field-label">Value</div>
-              <input
-                className="input"
-                disabled={disabled}
-                value={value?.value || ""}
-                onChange={(e) => onChange({ ...value, value: e.target.value })}
-                placeholder="type…"
-              />
-            </label>
-          )}
-
-          <div className="row" style={{ gap: 8, justifyContent: "flex-end" }}>
-            <button
-              type="button"
-              className="btn btn-ghost"
-              onClick={() => {
-                onClear();
-                setOpen(false);
+      {open
+        ? createPortal(
+            <div
+              ref={popRef}
+              className="card th-filter-pop"
+              style={{
+                position: "fixed",
+                top: pos.top,
+                left: pos.left,
+                zIndex: 99999,
+                width: 260,
+                padding: 10,
+                background: "rgba(10,18,35,0.98)",
+                border: "1px solid rgba(255,255,255,0.12)",
+                borderRadius: 14,
+                boxShadow: "0 18px 40px rgba(0,0,0,0.35)",
               }}
-              disabled={disabled}
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") commitAndClose();
+                if (e.key === "Escape") setOpen(false);
+              }}
             >
-              Clear
-            </button>
-            <button
-              type="button"
-              className="btn"
-              onClick={() => setOpen(false)}
-              disabled={disabled}
-            >
-              Done
-            </button>
-          </div>
+              <div style={{ fontWeight: 800, marginBottom: 8 }}>
+                {label} filter
+              </div>
 
-          <div className="muted" style={{ fontSize: 11, marginTop: 8 }}>
-            Tip: non-“contains” filters are applied on the current page (limit
-            up to 200).
-          </div>
-        </div>
-      ) : null}
+              <label className="field" style={{ marginBottom: 8 }}>
+                <div className="field-label">Operator</div>
+                <select
+                  className="input"
+                  disabled={disabled}
+                  value={draft.op}
+                  onChange={(e) =>
+                    setDraft((d) => ({ ...d, op: e.target.value }))
+                  }
+                >
+                  {FILTER_OPS.map((o) => (
+                    <option key={o.key} value={o.key}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              {draft.op === "blank" || draft.op === "not_blank" ? null : (
+                <label className="field" style={{ marginBottom: 8 }}>
+                  <div className="field-label">Value</div>
+                  <input
+                    className="input"
+                    disabled={disabled}
+                    value={draft.value}
+                    onChange={(e) =>
+                      setDraft((d) => ({ ...d, value: e.target.value }))
+                    }
+                    placeholder="type…"
+                    autoFocus
+                  />
+                </label>
+              )}
+
+              <div
+                className="row"
+                style={{ gap: 8, justifyContent: "flex-end" }}
+              >
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={clearAndClose}
+                  disabled={disabled}
+                >
+                  Clear
+                </button>
+
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => setOpen(false)}
+                  disabled={disabled}
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={commitAndClose}
+                  disabled={disabled}
+                >
+                  Done
+                </button>
+              </div>
+
+              <div className="muted" style={{ fontSize: 11, marginTop: 8 }}>
+                Tip: Press <strong>Enter</strong> to apply, <strong>Esc</strong>{" "}
+                to close.
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </span>
   );
 }
@@ -332,11 +433,13 @@ export function MetersPage() {
   const { user } = useAuth();
   const role = user?.role;
   const nav = useNavigate();
+  const { search } = useLocation();
+  const [urlSynced, setUrlSynced] = useState(false);
 
   const scopeKey = user?.activeCompanyId || user?.companyId || "noscope";
   const canAssign = role === "admin" || role === "superadmin";
-
-  // Collapsible filters state (remembered)
+  
+ // Collapsible filters state (remembered)
   const [filtersOpen, setFiltersOpen] = useState(() => {
     const v = localStorage.getItem("metersFiltersOpen");
     return v ? v === "1" : false;
@@ -360,6 +463,7 @@ export function MetersPage() {
   }));
 
   const [applied, setApplied] = useState(() => ({ ...form }));
+  const [page, setPage] = useState(1);
 
   // Header filters: fieldKey -> { op, value }
   const [headerFilters, setHeaderFilters] = useState(() => ({
@@ -377,7 +481,7 @@ export function MetersPage() {
     assignedTo: { op: "contains", value: "" },
   }));
 
-  const [page, setPage] = useState(1);
+  
   const [highlightWindow, setHighlightWindow] = useState("24h");
 
   const [loading, setLoading] = useState(false);
@@ -421,7 +525,34 @@ export function MetersPage() {
     setSuccess("");
     setError(null);
   }
+useEffect(() => {
+  const sp = new URLSearchParams(search);
 
+  const missing = sp.get("missing") || "";
+  const q = sp.get("q") || "";
+  const limitParam = sp.get("limit");
+  const limit = limitParam ? Number(limitParam) : undefined;
+
+  // If URL has no relevant params, still allow initial load
+  if (!missing && !q && !limitParam) {
+    setUrlSynced(true);
+    return;
+  }
+
+  const next = {
+    ...form,
+    missing,
+    q,
+    limit: Number.isFinite(limit) ? limit : form.limit,
+  };
+
+  setForm(next);
+  applyNow(next);
+  setFiltersOpen(true);
+  setUrlSynced(true);
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [search]);
   function onApplyClicked() {
     applyNow({ ...form });
   }
@@ -618,6 +749,7 @@ export function MetersPage() {
 
   // Load meters when applied filters or page changes
   useEffect(() => {
+    if (!urlSynced) return;
     async function load() {
       setLoading(true);
       setError(null);
@@ -628,26 +760,35 @@ export function MetersPage() {
         // - We ALSO send header filters only when:
         //   - op === "contains"
         //   - and field is one of the backend-supported contains params
+        const tableLimit = Math.min(
+          200,
+          Math.max(1, Number(applied.limit) || 50),
+        );
+
         const serverParams = {
           page,
-          ...applied,
           includeAssignments: canAssign ? 1 : 0,
+
+          limit: tableLimit,
+
           q: applied.q || undefined,
           missing: applied.missing || undefined,
           electronicId: applied.electronicId || undefined,
           accountNumber: applied.accountNumber || undefined,
           address: applied.address || undefined,
           route: applied.route || undefined,
-        };
 
-        for (const [field, f] of Object.entries(headerFilters)) {
-          if (!f) continue;
-          if (f.op !== "contains") continue;
-          if (!SERVER_CONTAINS_FILTERS.has(field)) continue;
-          const v = String(f.value || "").trim();
-          if (!v) continue;
-          serverParams[field] = v;
-        }
+          sortBy: applied.sortBy,
+          sortDir: applied.sortDir,
+        };
+        // for (const [field, f] of Object.entries(headerFilters)) {
+        // if (!f) continue;
+        //if (f.op !== "contains") continue;
+        //if (!SERVER_CONTAINS_FILTERS.has(field)) continue;
+        // const v = String(f.value || "").trim();
+        //if (!v) continue;
+        //serverParams[field] = v;
+        //}
 
         const data = await listMetersQuickApi(serverParams);
         setPayload(data);
@@ -657,7 +798,7 @@ export function MetersPage() {
           String(e?.error || "").startsWith("No company scope selected") &&
           role === "superadmin"
         ) {
-          nav("/superadmin/context");
+          nav("/settings");
           return;
         }
         setError(e);
@@ -667,7 +808,7 @@ export function MetersPage() {
     }
 
     load();
-  }, [page, applied, role, nav, canAssign, headerFilters]);
+  }, [urlSynced, page, applied, role, nav, canAssign]);
 
   // Load techs for assignment toolbar
   useEffect(() => {
@@ -800,7 +941,7 @@ export function MetersPage() {
               type="button"
               className="btn"
               onClick={onApplyClicked}
-              disabled={loading}
+              disabled={false}
               title="Apply current filter form"
             >
               Apply
@@ -810,7 +951,7 @@ export function MetersPage() {
               type="button"
               className="btn btn-ghost"
               onClick={clearFilters}
-              disabled={loading}
+              disabled={false}
               title="Reset filters"
             >
               Clear
@@ -830,12 +971,9 @@ export function MetersPage() {
                 className="input"
                 value={form.q}
                 onChange={(e) => setForm((f) => ({ ...f, q: e.target.value }))}
-                disabled={loading}
+                disabled={false}
                 placeholder="Search across EID, acct, serial, customer, address, route"
               />
-              <div className="field-hint">
-                (Your global search is in AppLayout — this is for bulk ops.)
-              </div>
             </label>
 
             {/* Missing chips (AUTO APPLY) */}
@@ -852,7 +990,7 @@ export function MetersPage() {
                       key={c.key}
                       type="button"
                       className={`chip chip-${c.key} ${active ? "chip-active" : ""}`}
-                      disabled={loading}
+                      disabled={false}
                       onClick={() => {
                         const nextMissing = toggleMissingChip(
                           form.missing,
@@ -873,7 +1011,7 @@ export function MetersPage() {
                   <button
                     type="button"
                     className="chip chip-clear"
-                    disabled={loading}
+                    disabled={false}
                     onClick={() => {
                       const next = { ...form, missing: "" };
                       setForm(next);
@@ -883,10 +1021,6 @@ export function MetersPage() {
                     Clear
                   </button>
                 ) : null}
-              </div>
-
-              <div className="field-hint missing-hint">
-                Tip: “Any missing” is OR. Specific chips combine with AND.
               </div>
             </div>
 
@@ -904,7 +1038,7 @@ export function MetersPage() {
                     limit: Number(e.target.value) || 50,
                   }))
                 }
-                disabled={loading}
+                disabled={false}
               />
               <div className="field-hint">Max 200</div>
             </label>
@@ -917,7 +1051,7 @@ export function MetersPage() {
                 className="input"
                 value={highlightWindow}
                 onChange={(e) => setHighlightWindow(e.target.value)}
-                disabled={loading}
+                disabled={false}
               >
                 <option value="off">off</option>
                 <option value="1h">last 1 hour</option>
@@ -1012,7 +1146,7 @@ export function MetersPage() {
                   className="pill"
                   onClick={() => clearOnePill(p)}
                   title="Remove filter"
-                  disabled={loading}
+                  disabled={false}
                 >
                   {p.label} <span className="pill-x">✕</span>
                 </button>
@@ -1092,6 +1226,7 @@ export function MetersPage() {
                     <span
                       className="th-head"
                       style={{
+                        onClick: (e) => e.stopPropagation(),
                         display: "inline-flex",
                         alignItems: "center",
                         gap: 6,
@@ -1102,7 +1237,7 @@ export function MetersPage() {
                         fieldKey="electronicId"
                         label="Electronic ID"
                         value={headerFilters.electronicId}
-                        disabled={loading}
+                        disabled={false}
                         onChange={(next) =>
                           setHeaderFilters((p) => ({
                             ...p,
@@ -1128,6 +1263,7 @@ export function MetersPage() {
                     <span
                       className="th-head"
                       style={{
+                        onClick: (e) => e.stopPropagation(),
                         display: "inline-flex",
                         alignItems: "center",
                         gap: 6,
@@ -1138,7 +1274,7 @@ export function MetersPage() {
                         fieldKey="accountNumber"
                         label="Account #"
                         value={headerFilters.accountNumber}
-                        disabled={loading}
+                        disabled={false}
                         onChange={(next) =>
                           setHeaderFilters((p) => ({
                             ...p,
@@ -1164,6 +1300,7 @@ export function MetersPage() {
                     <span
                       className="th-head"
                       style={{
+                        onClick: (e) => e.stopPropagation(),
                         display: "inline-flex",
                         alignItems: "center",
                         gap: 6,
@@ -1174,7 +1311,7 @@ export function MetersPage() {
                         fieldKey="meterSerialNumber"
                         label="Serial #"
                         value={headerFilters.meterSerialNumber}
-                        disabled={loading}
+                        disabled={false}
                         onChange={(next) =>
                           setHeaderFilters((p) => ({
                             ...p,
@@ -1200,6 +1337,7 @@ export function MetersPage() {
                     <span
                       className="th-head"
                       style={{
+                        onClick: (e) => e.stopPropagation(),
                         display: "inline-flex",
                         alignItems: "center",
                         gap: 6,
@@ -1210,7 +1348,7 @@ export function MetersPage() {
                         fieldKey="customerName"
                         label="Customer"
                         value={headerFilters.customerName}
-                        disabled={loading}
+                        disabled={false}
                         onChange={(next) =>
                           setHeaderFilters((p) => ({
                             ...p,
@@ -1236,6 +1374,7 @@ export function MetersPage() {
                     <span
                       className="th-head"
                       style={{
+                        onClick: (e) => e.stopPropagation(),
                         display: "inline-flex",
                         alignItems: "center",
                         gap: 6,
@@ -1246,7 +1385,7 @@ export function MetersPage() {
                         fieldKey="address"
                         label="Address"
                         value={headerFilters.address}
-                        disabled={loading}
+                        disabled={false}
                         onChange={(next) =>
                           setHeaderFilters((p) => ({ ...p, address: next }))
                         }
@@ -1269,6 +1408,7 @@ export function MetersPage() {
                     <span
                       className="th-head"
                       style={{
+                        onClick: (e) => e.stopPropagation(),
                         display: "inline-flex",
                         alignItems: "center",
                         gap: 6,
@@ -1279,7 +1419,7 @@ export function MetersPage() {
                         fieldKey="route"
                         label="Route"
                         value={headerFilters.route}
-                        disabled={loading}
+                        disabled={false}
                         onChange={(next) =>
                           setHeaderFilters((p) => ({ ...p, route: next }))
                         }
@@ -1302,6 +1442,7 @@ export function MetersPage() {
                     <span
                       className="th-head"
                       style={{
+                        onClick: (e) => e.stopPropagation(),
                         display: "inline-flex",
                         alignItems: "center",
                         gap: 6,
@@ -1312,7 +1453,7 @@ export function MetersPage() {
                         fieldKey="latitude"
                         label="Lat"
                         value={headerFilters.latitude}
-                        disabled={loading}
+                        disabled={false}
                         onChange={(next) =>
                           setHeaderFilters((p) => ({ ...p, latitude: next }))
                         }
@@ -1334,6 +1475,7 @@ export function MetersPage() {
                     <span
                       className="th-head"
                       style={{
+                        onClick: (e) => e.stopPropagation(),
                         display: "inline-flex",
                         alignItems: "center",
                         gap: 6,
@@ -1344,7 +1486,7 @@ export function MetersPage() {
                         fieldKey="longitude"
                         label="Lng"
                         value={headerFilters.longitude}
-                        disabled={loading}
+                        disabled={false}
                         onChange={(next) =>
                           setHeaderFilters((p) => ({ ...p, longitude: next }))
                         }
@@ -1367,6 +1509,7 @@ export function MetersPage() {
                     <span
                       className="th-head"
                       style={{
+                        onClick: (e) => e.stopPropagation(),
                         display: "inline-flex",
                         alignItems: "center",
                         gap: 6,
@@ -1377,7 +1520,7 @@ export function MetersPage() {
                         fieldKey="meterSize"
                         label="Meter Size"
                         value={headerFilters.meterSize}
-                        disabled={loading}
+                        disabled={false}
                         onChange={(next) =>
                           setHeaderFilters((p) => ({ ...p, meterSize: next }))
                         }
@@ -1400,6 +1543,7 @@ export function MetersPage() {
                     <span
                       className="th-head"
                       style={{
+                        onClick: (e) => e.stopPropagation(),
                         display: "inline-flex",
                         alignItems: "center",
                         gap: 6,
@@ -1410,7 +1554,7 @@ export function MetersPage() {
                         fieldKey="numberOfPictures"
                         label="# Pics"
                         value={headerFilters.numberOfPictures}
-                        disabled={loading}
+                        disabled={false}
                         onChange={(next) =>
                           setHeaderFilters((p) => ({
                             ...p,
@@ -1432,6 +1576,7 @@ export function MetersPage() {
                     <span
                       className="th-head"
                       style={{
+                        onClick: (e) => e.stopPropagation(),
                         display: "inline-flex",
                         alignItems: "center",
                         gap: 6,
@@ -1442,7 +1587,7 @@ export function MetersPage() {
                         fieldKey="locationNotes"
                         label="Notes"
                         value={headerFilters.locationNotes}
-                        disabled={loading}
+                        disabled={false}
                         onChange={(next) =>
                           setHeaderFilters((p) => ({
                             ...p,
@@ -1464,6 +1609,7 @@ export function MetersPage() {
                     <span
                       className="th-head"
                       style={{
+                        onClick: (e) => e.stopPropagation(),
                         display: "inline-flex",
                         alignItems: "center",
                         gap: 6,
@@ -1474,7 +1620,7 @@ export function MetersPage() {
                         fieldKey="assignedTo"
                         label="Assigned"
                         value={headerFilters.assignedTo}
-                        disabled={loading}
+                        disabled={false}
                         onChange={(next) =>
                           setHeaderFilters((p) => ({ ...p, assignedTo: next }))
                         }

@@ -17,8 +17,7 @@ import { ReportsPage } from "./pages/ReportsPage.jsx";
 import { TechAssignmentsPage } from "./pages/TechAssignmentsPage.jsx";
 import { TechUpdatesPage } from "./pages/TechUpdatesPage.jsx";
 import { UpdateDetailPage } from "./pages/UpdateDetailPage.jsx";
-import { ProfilePage } from "./pages/ProfilePage.jsx";
-import { SuperadminContextPage } from "./pages/SuperadminContextPage.jsx";
+
 import { AdminAssignmentsPage } from "./pages/AdminAssignmentsPage.jsx";
 import { NotFoundPage } from "./pages/NotFoundPage.jsx";
 import Settings from "./pages/Settings.jsx";
@@ -41,7 +40,10 @@ export default function App() {
           <Route path="/updates/:id" element={<UpdateDetailPage />} />
 
           <Route path="/settings" element={<Settings />} />
-          <Route path="/profile" element={<ProfilePage />} />
+          <Route
+            path="/profile"
+            element={<Navigate to="/settings" replace />}
+          />
 
           <Route element={<RequireRole roles={["admin", "superadmin"]} />}>
             <Route path="/assignments" element={<AdminAssignmentsPage />} />
@@ -57,7 +59,7 @@ export default function App() {
           <Route element={<RequireRole roles={["superadmin"]} />}>
             <Route
               path="/superadmin/context"
-              element={<SuperadminContextPage />}
+              element={<Navigate to="/settings" replace />}
             />
           </Route>
 

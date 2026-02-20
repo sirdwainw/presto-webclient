@@ -23,7 +23,7 @@ export function listMetersApi(params = {}) {
   if (params.sortDir) qs.set("sortDir", String(params.sortDir));
 
   if (params.includeAssignments) qs.set("includeAssignments", "1");
-  
+
   const query = qs.toString();
   return apiFetch(`/api/meters${query ? `?${query}` : ""}`, { method: "GET" });
 }
@@ -44,6 +44,8 @@ export function createMeterUpdateApi(meterId, body) {
     body: JSON.stringify(body),
   });
 }
-export function listMetersQuickApi(params) {
-  return listMetersApi({ ...params, limit: 8 });
+export function listMetersQuickApi(params = {}) {
+ 
+  const limit = params.limit ?? 8;
+  return listMetersApi({ ...params, limit });
 }

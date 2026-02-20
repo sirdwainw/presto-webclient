@@ -79,7 +79,7 @@ export function RegisterPage() {
           </FormField>
 
           <FormField
-            label="Role (optional)"
+            label="Role "
             hint="Allowed roles per contract: tech, admin, superadmin"
           >
             <select
@@ -88,7 +88,7 @@ export function RegisterPage() {
               onChange={(e) => setRole(e.target.value)}
               disabled={loading}
             >
-              <option value="">(leave unset)</option>
+              
               <option value="tech">tech</option>
               <option value="admin">admin</option>
               <option value="superadmin">superadmin</option>
@@ -97,7 +97,7 @@ export function RegisterPage() {
 
           <FormField
             label="Company ID (optional)"
-            hint="Only provide if your backend expects companyId on registration."
+            hint="You can set later"
           >
             <input
               className="input"

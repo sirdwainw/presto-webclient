@@ -68,7 +68,7 @@ export function DashboardPage() {
   // If superadmin and no activeCompanyId, route to context selection
   useEffect(() => {
     if (role === "superadmin" && !user?.activeCompanyId) {
-      nav("/superadmin/context", { replace: true });
+      nav("/settings", { replace: true });
     }
   }, [role, user?.activeCompanyId, nav]);
 
@@ -88,7 +88,7 @@ export function DashboardPage() {
           e.error.startsWith("No company scope selected") &&
           role === "superadmin"
         ) {
-          nav("/superadmin/context");
+          nav("/settings");
           return;
         }
         setSummaryError(e);

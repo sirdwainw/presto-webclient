@@ -226,7 +226,7 @@ export function AppLayout() {
               Dashboard
             </NavItem>
             <NavItem to="/meters">Meters</NavItem>
-            <NavItem to="/profile">Profile</NavItem>
+            
             <NavItem to="/settings">Settings</NavItem>
 
             {role === "tech" && (
@@ -244,9 +244,7 @@ export function AppLayout() {
               </>
             )}
 
-            {role === "superadmin" && (
-              <NavItem to="/superadmin/context">Company Context</NavItem>
-            )}
+           
           </nav>
         </aside>
 

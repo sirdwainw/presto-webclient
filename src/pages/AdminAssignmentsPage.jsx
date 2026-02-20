@@ -68,7 +68,7 @@ export function AdminAssignmentsPage() {
       setSelectedTechId((prev) => prev || firstId);
     } catch (e) {
       if (isCompanyScopeError(e) && role === "superadmin") {
-        nav("/superadmin/context");
+        nav("/settings");
         return;
       }
       setTechError(e);

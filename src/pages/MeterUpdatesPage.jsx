@@ -99,7 +99,7 @@ export function MeterUpdatesPage() {
         e?.error === "No company scope selected" &&
         role === "superadmin"
       ) {
-        nav("/superadmin/context");
+        nav("/settings");
         return;
       }
       setMeterError(e);
@@ -175,7 +175,7 @@ export function MeterUpdatesPage() {
         e?.error === "No company scope selected" &&
         role === "superadmin"
       ) {
-        nav("/superadmin/context");
+        nav("/settings");
         return;
       }
       setListError(e);
@@ -242,7 +242,7 @@ export function MeterUpdatesPage() {
         e2?.error === "No company scope selected" &&
         role === "superadmin"
       ) {
-        nav("/superadmin/context");
+        nav("/settings");
         return;
       }
       setSubmitError(e2);

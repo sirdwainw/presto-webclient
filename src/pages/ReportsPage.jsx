@@ -42,7 +42,7 @@ export function ReportsPage() {
         e?.error === "No company scope selected" &&
         role === "superadmin"
       ) {
-        nav("/superadmin/context");
+        nav("/settings");
         return;
       }
       setError(e);

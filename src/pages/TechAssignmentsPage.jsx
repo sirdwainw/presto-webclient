@@ -50,7 +50,7 @@ export function TechAssignmentsPage() {
         setPayload(data);
       } catch (e) {
         if (isCompanyScopeError(e) && role === "superadmin") {
-          nav("/superadmin/context");
+          nav("/settings");
           return;
         }
         setError(e);
