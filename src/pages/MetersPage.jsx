@@ -17,6 +17,7 @@ import { listMetersQuickApi } from "../api/meters.api";
 import {
   listAssignableTechsApi,
   postAssignments,
+  unassignMetersApi
 } from "../api/assignments.api";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { LoadingBlock } from "../components/LoadingBlock";
@@ -507,7 +508,7 @@ export function MetersPage() {
   const startIndex = total === 0 ? 0 : (currentPage - 1) * limit + 1;
   const endIndex = total === 0 ? 0 : Math.min(currentPage * limit, total);
 const [reloadKey, setReloadKey] = useState(0);
-
+const reloadMeters = () => setReloadKey((k) => k + 1);
   function isRecentApproved(meter) {
     const ms = windowMs(highlightWindow);
     if (!ms) return false;
@@ -856,13 +857,39 @@ useEffect(() => {
       clearSelection();
     } catch (e) {
 
-      
+
       setError(e);
     } finally {
       setAssignLoading(false);
     }
   }
+async function unassignSelected() {
+  setSuccess("");
+  setError(null);
 
+  if (selectedIds.size === 0) {
+    setError({ error: "Select at least one meter." });
+    return;
+  }
+
+  setAssignLoading(true);
+  try {
+    const meterIds = Array.from(selectedIds);
+
+    
+    await unassignMetersApi({ meterIds });
+
+    setSuccess(`Unassigned ${meterIds.length} meter(s).`);
+    clearSelection();
+
+    // if you added reloadKey earlier:
+   setReloadKey((k) => k + 1);
+  } catch (e) {
+    setError(e);
+  } finally {
+    setAssignLoading(false);
+  }
+}
   /** Client-side filtering for header filters */
   const metersFiltered = useMemo(() => {
     let out = metersRaw;
@@ -1129,7 +1156,14 @@ useEffect(() => {
                 >
                   Clear selection
                 </button>
-
+                <button
+                  className="btn btn-ghost"
+                  type="button"
+                  onClick={unassignSelected}
+                  disabled={assignLoading || selectedCount === 0}
+                >
+                  Unassign selected
+                </button>
                 <button
                   className="btn btn-primary"
                   onClick={assignSelected}

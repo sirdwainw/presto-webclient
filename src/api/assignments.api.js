@@ -17,3 +17,10 @@ export function postAssignmentsByQuery(body) {
     body: JSON.stringify(body),
   });
 }
+
+export function unassignMetersApi({ meterIds }) {
+  return apiFetch("/api/assignments/unassign", {
+    method: "POST",
+    body: JSON.stringify({ meterIds }),
+  });
+}
