@@ -50,9 +50,12 @@ export function getEntityId(obj) {
 
   return null;
 }
-
+function withLeadingSlash(path) {
+  if (!path) return "/";
+  return path.startsWith("/") ? path : `/${path}`;
+}
 export async function apiFetch(path, options = {}) {
-  const url = `${getApiBaseUrl()}${path}`;
+  const url = `${getApiBaseUrl()}${withLeadingSlash(path)}`;
   const token = getToken();
 
   const headers = new Headers(options.headers || {});

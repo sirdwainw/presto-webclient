@@ -506,6 +506,7 @@ export function MetersPage() {
 
   const startIndex = total === 0 ? 0 : (currentPage - 1) * limit + 1;
   const endIndex = total === 0 ? 0 : Math.min(currentPage * limit, total);
+const [reloadKey, setReloadKey] = useState(0);
 
   function isRecentApproved(meter) {
     const ms = windowMs(highlightWindow);
@@ -808,7 +809,7 @@ useEffect(() => {
     }
 
     load();
-  }, [urlSynced, page, applied, role, nav, canAssign]);
+  }, [urlSynced, page, applied, role, nav, canAssign, reloadKey]);
 
   // Load techs for assignment toolbar
   useEffect(() => {
@@ -850,8 +851,12 @@ useEffect(() => {
       setSuccess(
         `Assigned ${result?.assignedCount ?? meterIds.length} meter(s) to the selected tech.`,
       );
+      
+      setReloadKey((k) => k + 1);
       clearSelection();
     } catch (e) {
+
+      
       setError(e);
     } finally {
       setAssignLoading(false);
