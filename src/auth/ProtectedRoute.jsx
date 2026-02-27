@@ -10,9 +10,8 @@ export function ProtectedRoute() {
   if (isInitializing) return <LoadingBlock title="Loading session..." />;
 
   if (!isAuthed) {
-    return <Navigate to="/login" replace state={{ from: loc.pathname }} />;
+    return <Navigate to="/login" replace state={{ from: loc }} />;
   }
 
-  // If authed, render the nested routes
   return <Outlet />;
 }

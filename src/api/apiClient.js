@@ -33,13 +33,13 @@ export function getEntityId(obj) {
   if (typeof obj._id === "string" || typeof obj._id === "number")
     return String(obj._id);
 
-  // Some APIs return Mongo-ish objects; only use if present.
   if (
     obj._id &&
     typeof obj._id === "object" &&
     typeof obj._id.$oid === "string"
-  )
+  ) {
     return obj._id.$oid;
+  }
 
   if (typeof obj.updateId === "string" || typeof obj.updateId === "number")
     return String(obj.updateId);
@@ -50,10 +50,13 @@ export function getEntityId(obj) {
 
   return null;
 }
+
 function withLeadingSlash(path) {
   if (!path) return "/";
   return path.startsWith("/") ? path : `/${path}`;
 }
+
+// ✅ Named export that all api modules import
 export async function apiFetch(path, options = {}) {
   const url = `${getApiBaseUrl()}${withLeadingSlash(path)}`;
   const token = getToken();
@@ -83,18 +86,14 @@ export async function apiFetch(path, options = {}) {
     const normalized = isJson
       ? normalizeErrorPayload(payload)
       : { error: "Request failed" };
-    const err = {
-      status: res.status,
-      ...normalized,
-      raw: payload,
-    };
+    const err = { status: res.status, ...normalized, raw: payload };
 
     // Contract requirement: on 401 trigger logout in AuthContext
     if (res.status === 401) {
       window.dispatchEvent(new CustomEvent("presto:unauthorized"));
     }
 
-    throw err;
+    throw err; // NOTE: throws plain object
   }
 
   return payload;

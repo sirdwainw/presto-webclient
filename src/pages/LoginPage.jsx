@@ -8,7 +8,7 @@ export function LoginPage() {
   const { login } = useAuth();
   const nav = useNavigate();
   const loc = useLocation();
-  const from = loc.state?.from || "/dashboard";
+  const from = loc.state?.from?.pathname || loc.state?.from || "/dashboard";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -21,7 +21,7 @@ export function LoginPage() {
     setError(null);
     setLoading(true);
     try {
-      await login(email, password);
+      await login({ email, password });
       nav(from, { replace: true });
     } catch (err) {
       setError(err);

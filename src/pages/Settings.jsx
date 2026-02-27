@@ -114,8 +114,7 @@ export default function Settings() {
       <h2>Settings</h2>
 
       <p style={{ marginTop: 8 }}>
-        Choose the company you’re currently working under. This is saved to your
-        account and your JWT is refreshed.
+        Choose the company you’re currently working under. 
       </p>
 
       {error ? (
