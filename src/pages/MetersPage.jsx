@@ -2,11 +2,18 @@
 // Full replacement: sortable + header-filterable columns with ops:
 // contains / not contains / blank / not blank
 //
+// Added (requested):
+// ✅ Column sizing + resizing (drag header edge; double-click to reset)
+// ✅ Show/hide columns (Columns panel)
+// ✅ Reorder columns (drag headers)
+// ✅ Column presets (Encore Compact / Audit / GPS Cleanup)
+// ✅ Pinned columns (Actions + Electronic ID pinned left; Selection pinned too for admin)
+//
 // Notes:
 // - Backend supports server-side "contains" filters for: electronicId, accountNumber, address, route
 // - Everything else (and ops not supported by backend) is applied client-side on the current page of results.
 // - Sorting: uses backend sort for allowed fields; falls back to client-side sort if needed.
-// - Filters panel remains collapsible; sort dropdown removed to save space.
+// - Filters panel remains collapsible.
 // - Missing chips still auto-apply.
 // - Assignment toolbar stays above the table.
 
@@ -17,7 +24,7 @@ import { listMetersQuickApi } from "../api/meters.api";
 import {
   listAssignableTechsApi,
   postAssignments,
-  unassignMetersApi
+  unassignMetersApi,
 } from "../api/assignments.api";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { LoadingBlock } from "../components/LoadingBlock";
@@ -62,6 +69,37 @@ const MISSING_CHIPS = [
 ];
 
 const MISSING_ORDER = ["any", "latlng", "notes", "photo", "meterSize"];
+
+/** ---------- tiny utils ---------- */
+function clamp(n, min, max) {
+  return Math.max(min, Math.min(max, n));
+}
+
+function loadTablePrefs(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+function saveTablePrefs(key, prefs) {
+  try {
+    localStorage.setItem(key, JSON.stringify(prefs));
+  } catch {
+    // ignore
+  }
+}
+
+function moveItem(arr, fromId, toId) {
+  const from = arr.indexOf(fromId);
+  const to = arr.indexOf(toId);
+  if (from === -1 || to === -1 || from === to) return arr;
+  const copy = [...arr];
+  const [item] = copy.splice(from, 1);
+  copy.splice(to, 0, item);
+  return copy;
+}
 
 function windowMs(val) {
   switch (val) {
@@ -123,7 +161,7 @@ function normalizeStr(v) {
 
 function isBlankValue(v) {
   if (v === null || v === undefined) return true;
-  if (typeof v === "number") return Number.isNaN(v); // rare
+  if (typeof v === "number") return Number.isNaN(v);
   const s = String(v).trim();
   return s.length === 0;
 }
@@ -179,7 +217,6 @@ function applyOpToValue(op, value, q) {
   if (op === "blank") return isBlankValue(value);
   if (op === "not_blank") return !isBlankValue(value);
 
-  // contains / not_contains
   const hit = containsCI(value, q);
   if (op === "contains") return hit;
   if (op === "not_contains") return !hit;
@@ -192,7 +229,52 @@ function isActiveHeaderFilter(f) {
   if (f.op === "blank" || f.op === "not_blank") return true;
   return Boolean(String(f.value || "").trim());
 }
+function measureTextPx(text, font = "600 14px system-ui") {
+  const canvas =
+    measureTextPx._c || (measureTextPx._c = document.createElement("canvas"));
+  const ctx = canvas.getContext("2d");
+  ctx.font = font;
+  return Math.ceil(ctx.measureText(String(text ?? "")).width);
+}
 
+// Double-click behavior: shrink to fit the SMALLEST text on the current page
+function autoShrinkColumn(colId) {
+  const c = colById[colId];
+  if (!c || c.disableResize) return;
+
+  // Pull values from current page (cap to avoid doing too much work)
+  const vals = metersFinal
+    .slice(0, 200)
+    .map((m) => normalizeStr(getColumnValue(m, colId)));
+
+  // Prefer non-empty values; if all empty, just collapse to minimum
+  const nonEmpty = vals.filter((v) => v.trim().length > 0);
+
+  // Smallest width text (by actual pixel width, not string length)
+  const smallestText = nonEmpty.length ? nonEmpty : vals;
+  let minPx = Infinity;
+
+  for (const v of smallestText) {
+    const px = measureTextPx(v, "600 14px system-ui");
+    if (px > 0 && px < minPx) minPx = px;
+  }
+
+  // If everything was blank, default to 0 width text
+  if (!Number.isFinite(minPx)) minPx = 0;
+
+  // Extra space for padding + icons area in the header (drag icon + filter icon)
+  const extra =
+    18 + // cell padding
+    16 + // breathing room
+    34 + // header drag icon/spacing area
+    (c.filterKey ? 26 : 0);
+
+  const minW = c.minWidth ?? 40; // allow it to get small
+  const maxW = c.maxWidth ?? 900;
+
+  const nextW = clamp(minPx + extra, minW, maxW);
+  setColWidths((prev) => ({ ...prev, [colId]: nextW }));
+}
 function HeaderFilterPopover({
   fieldKey,
   label,
@@ -207,7 +289,6 @@ function HeaderFilterPopover({
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState({ top: 0, left: 0 });
 
-  // Local draft so typing doesn't "apply" instantly
   const [draft, setDraft] = useState(() => ({
     op: value?.op || "contains",
     value: value?.value || "",
@@ -215,7 +296,6 @@ function HeaderFilterPopover({
 
   const active = isActiveHeaderFilter(value);
 
-  // When opening (or when upstream value changes), sync draft from value
   useEffect(() => {
     if (!open) return;
     setDraft({
@@ -225,7 +305,6 @@ function HeaderFilterPopover({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // Close on outside click (must include portal)
   useEffect(() => {
     if (!open) return;
 
@@ -241,7 +320,6 @@ function HeaderFilterPopover({
     return () => document.removeEventListener("mousedown", onDoc);
   }, [open]);
 
-  // Position (relative to the filter button)
   useEffect(() => {
     if (!open) return;
 
@@ -269,10 +347,8 @@ function HeaderFilterPopover({
   }, [open]);
 
   function commitAndClose() {
-    // Commit draft to parent
     const next = { op: draft.op, value: draft.value };
 
-    // For blank/not_blank, ignore value
     if (next.op === "blank" || next.op === "not_blank") {
       onChange({ op: next.op, value: "" });
       setOpen(false);
@@ -291,13 +367,11 @@ function HeaderFilterPopover({
   return (
     <span
       ref={wrapRef}
-      className="th-wrap"
       style={{
-        position: "relative",
         display: "inline-flex",
         alignItems: "center",
-        gap: 6,
       }}
+      onClick={(e) => e.stopPropagation()}
     >
       <button
         type="button"
@@ -430,6 +504,172 @@ function HeaderFilterPopover({
   );
 }
 
+/** ---------- Columns panel (hide/show + presets) ---------- */
+function ColumnsPopover({
+  columns,
+  visibility,
+  setVisibility,
+  onReset,
+  presetId,
+  setPresetId,
+  onApplyPreset,
+}) {
+  const btnRef = useRef(null);
+  const popRef = useRef(null);
+
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+
+  const list = columns.filter((c) => !c.disableHide);
+
+  useEffect(() => {
+    if (!open) return;
+
+    function onDoc(e) {
+      const t = e.target;
+      if (btnRef.current?.contains(t)) return;
+      if (popRef.current?.contains(t)) return;
+      setOpen(false);
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const r = btnRef.current?.getBoundingClientRect();
+    if (!r) return;
+
+    const width = 300;
+    setPos({
+      top: r.bottom + 8,
+      left: Math.max(8, r.right - width),
+    });
+  }, [open]);
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        className="btn btn-ghost"
+        onClick={() => setOpen((s) => !s)}
+        title="Show/hide columns, presets, pinned columns"
+      >
+        Columns ▾
+      </button>
+
+      {open
+        ? createPortal(
+            <div
+              ref={popRef}
+              className="card"
+              style={{
+                position: "fixed",
+                top: pos.top,
+                left: pos.left,
+                zIndex: 99999,
+                width: 300,
+                padding: 12,
+                background: "rgba(10,18,35,0.98)",
+                border: "1px solid rgba(255,255,255,0.12)",
+                borderRadius: 14,
+                boxShadow: "0 18px 40px rgba(0,0,0,0.35)",
+              }}
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div style={{ fontWeight: 900, marginBottom: 10 }}>Columns</div>
+
+              <label className="field" style={{ marginBottom: 10 }}>
+                <div className="field-label">Preset</div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <select
+                    className="input"
+                    value={presetId}
+                    onChange={(e) => setPresetId(e.target.value)}
+                    style={{ flex: 1 }}
+                  >
+                    <option value="audit">Audit (all)</option>
+                    <option value="encore">Encore Compact</option>
+                    <option value="gps">GPS Cleanup</option>
+                  </select>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => onApplyPreset(presetId)}
+                    title="Apply preset layout"
+                  >
+                    Apply
+                  </button>
+                </div>
+                <div className="field-hint">
+                  Pinned columns: Selection (admin), Actions, Electronic ID
+                </div>
+              </label>
+
+              <div
+                className="stack"
+                style={{
+                  gap: 8,
+                  maxHeight: 280,
+                  overflow: "auto",
+                  paddingRight: 4,
+                }}
+              >
+                {list.map((c) => (
+                  <label
+                    key={c.id}
+                    style={{
+                      display: "flex",
+                      gap: 10,
+                      alignItems: "center",
+                      userSelect: "none",
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={visibility[c.id] !== false}
+                      onChange={(e) =>
+                        setVisibility((prev) => ({
+                          ...prev,
+                          [c.id]: e.target.checked,
+                        }))
+                      }
+                    />
+                    <span>{c.label}</span>
+                  </label>
+                ))}
+              </div>
+
+              <div
+                className="row"
+                style={{ gap: 8, justifyContent: "flex-end", marginTop: 12 }}
+              >
+                <button type="button" className="btn" onClick={onReset}>
+                  Reset layout
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => setOpen(false)}
+                >
+                  Done
+                </button>
+              </div>
+
+              <div className="muted" style={{ fontSize: 11, marginTop: 10 }}>
+                Tips: drag headers to reorder • drag header edge to resize •
+                double-click edge to reset width.
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
+    </>
+  );
+}
+
 export function MetersPage() {
   const { user } = useAuth();
   const role = user?.role;
@@ -439,8 +679,8 @@ export function MetersPage() {
 
   const scopeKey = user?.activeCompanyId || user?.companyId || "noscope";
   const canAssign = role === "admin" || role === "superadmin";
-  
- // Collapsible filters state (remembered)
+
+  // Collapsible filters state (remembered)
   const [filtersOpen, setFiltersOpen] = useState(() => {
     const v = localStorage.getItem("metersFiltersOpen");
     return v ? v === "1" : false;
@@ -449,12 +689,11 @@ export function MetersPage() {
     localStorage.setItem("metersFiltersOpen", filtersOpen ? "1" : "0");
   }, [filtersOpen]);
 
-  // Panel form (Apply-based) — keep minimal (global q is optional since you moved global search to AppLayout)
+  // Panel form (Apply-based)
   const [form, setForm] = useState(() => ({
     q: "",
     limit: 50,
     missing: "",
-    // keep these for server-side contains filters if you want to still use panel fields
     electronicId: "",
     accountNumber: "",
     address: "",
@@ -480,9 +719,11 @@ export function MetersPage() {
     numberOfPictures: { op: "contains", value: "" },
     locationNotes: { op: "contains", value: "" },
     assignedTo: { op: "contains", value: "" },
+    lastApprovedUpdateAt: { op: "contains", value: "" },
+    createdAt: { op: "contains", value: "" },
+    updatedAt: { op: "contains", value: "" },
   }));
 
-  
   const [highlightWindow, setHighlightWindow] = useState("24h");
 
   const [loading, setLoading] = useState(false);
@@ -507,8 +748,9 @@ export function MetersPage() {
 
   const startIndex = total === 0 ? 0 : (currentPage - 1) * limit + 1;
   const endIndex = total === 0 ? 0 : Math.min(currentPage * limit, total);
-const [reloadKey, setReloadKey] = useState(0);
-const reloadMeters = () => setReloadKey((k) => k + 1);
+
+  const [reloadKey, setReloadKey] = useState(0);
+
   function isRecentApproved(meter) {
     const ms = windowMs(highlightWindow);
     if (!ms) return false;
@@ -527,34 +769,36 @@ const reloadMeters = () => setReloadKey((k) => k + 1);
     setSuccess("");
     setError(null);
   }
-useEffect(() => {
-  const sp = new URLSearchParams(search);
 
-  const missing = sp.get("missing") || "";
-  const q = sp.get("q") || "";
-  const limitParam = sp.get("limit");
-  const limit = limitParam ? Number(limitParam) : undefined;
+  // Sync from URL (?missing=latlng, ?q=..., ?limit=...)
+  useEffect(() => {
+    const sp = new URLSearchParams(search);
 
-  // If URL has no relevant params, still allow initial load
-  if (!missing && !q && !limitParam) {
+    const missing = sp.get("missing") || "";
+    const q = sp.get("q") || "";
+    const limitParam = sp.get("limit");
+    const limitNum = limitParam ? Number(limitParam) : undefined;
+
+    if (!missing && !q && !limitParam) {
+      setUrlSynced(true);
+      return;
+    }
+
+    const next = {
+      ...form,
+      missing,
+      q,
+      limit: Number.isFinite(limitNum) ? limitNum : form.limit,
+    };
+
+    setForm(next);
+    applyNow(next);
+    setFiltersOpen(true);
     setUrlSynced(true);
-    return;
-  }
 
-  const next = {
-    ...form,
-    missing,
-    q,
-    limit: Number.isFinite(limit) ? limit : form.limit,
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
 
-  setForm(next);
-  applyNow(next);
-  setFiltersOpen(true);
-  setUrlSynced(true);
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [search]);
   function onApplyClicked() {
     applyNow({ ...form });
   }
@@ -613,11 +857,10 @@ useEffect(() => {
     setForm(reset);
     applyNow(reset);
 
-    // Clear header filters too
     setHeaderFilters((prev) => {
       const next = { ...prev };
       for (const k of Object.keys(next)) {
-        next[k] = { ...next[k], value: "", op: next[k]?.op || "contains" };
+        next[k] = { op: "contains", value: "" };
       }
       return next;
     });
@@ -628,7 +871,7 @@ useEffect(() => {
     e.stopPropagation();
   }
 
-  /** Sorting: click column header toggles asc/desc */
+  /** Sorting: click header toggles asc/desc */
   function toggleSort(field) {
     if (!field) return;
 
@@ -657,7 +900,6 @@ useEffect(() => {
       pills.push({ key: "missing", label: `Missing: ${applied.missing}` });
     if (applied.q) pills.push({ key: "q", label: `q: ${applied.q}` });
 
-    // Panel column filters (server)
     if (applied.electronicId)
       pills.push({
         key: "electronicId",
@@ -673,7 +915,6 @@ useEffect(() => {
     if (applied.route)
       pills.push({ key: "route", label: `Route: ${applied.route}` });
 
-    // Header filters
     for (const [field, f] of Object.entries(headerFilters)) {
       if (!isActiveHeaderFilter(f)) continue;
 
@@ -704,21 +945,15 @@ useEffect(() => {
   }, [applied, headerFilters]);
 
   function clearOnePill(pill) {
-    // Header filter pill?
     if (pill?.hfField) {
       const field = pill.hfField;
       setHeaderFilters((prev) => ({
         ...prev,
-        [field]: {
-          ...(prev[field] || { op: "contains", value: "" }),
-          value: "",
-          op: "contains",
-        },
+        [field]: { op: "contains", value: "" },
       }));
       return;
     }
 
-    // Panel pills
     const next = { ...form };
     if (pill.key === "q") next.q = "";
     if (pill.key === "missing") next.missing = "";
@@ -752,16 +987,12 @@ useEffect(() => {
   // Load meters when applied filters or page changes
   useEffect(() => {
     if (!urlSynced) return;
+
     async function load() {
       setLoading(true);
       setError(null);
 
       try {
-        // Merge server-side column filters:
-        // - We always send panel filters as-is (contains).
-        // - We ALSO send header filters only when:
-        //   - op === "contains"
-        //   - and field is one of the backend-supported contains params
         const tableLimit = Math.min(
           200,
           Math.max(1, Number(applied.limit) || 50),
@@ -770,7 +1001,6 @@ useEffect(() => {
         const serverParams = {
           page,
           includeAssignments: canAssign ? 1 : 0,
-
           limit: tableLimit,
 
           q: applied.q || undefined,
@@ -783,14 +1013,16 @@ useEffect(() => {
           sortBy: applied.sortBy,
           sortDir: applied.sortDir,
         };
-        // for (const [field, f] of Object.entries(headerFilters)) {
-        // if (!f) continue;
-        //if (f.op !== "contains") continue;
-        //if (!SERVER_CONTAINS_FILTERS.has(field)) continue;
-        // const v = String(f.value || "").trim();
-        //if (!v) continue;
-        //serverParams[field] = v;
-        //}
+
+        // Optional: merge header contains filters into server call for supported fields
+               // for (const [field, f] of Object.entries(headerFilters)) {
+        //   if (!f) continue;
+        //   if (f.op !== "contains") continue;
+        //   if (!SERVER_CONTAINS_FILTERS.has(field)) continue;
+        //   const v = String(f.value || "").trim();
+        //   if (!v) continue;
+        //   serverParams[field] = v;
+        // }
 
         const data = await listMetersQuickApi(serverParams);
         setPayload(data);
@@ -852,44 +1084,40 @@ useEffect(() => {
       setSuccess(
         `Assigned ${result?.assignedCount ?? meterIds.length} meter(s) to the selected tech.`,
       );
-      
+
       setReloadKey((k) => k + 1);
       clearSelection();
     } catch (e) {
-
-
       setError(e);
     } finally {
       setAssignLoading(false);
     }
   }
-async function unassignSelected() {
-  setSuccess("");
-  setError(null);
 
-  if (selectedIds.size === 0) {
-    setError({ error: "Select at least one meter." });
-    return;
+  async function unassignSelected() {
+    setSuccess("");
+    setError(null);
+
+    if (selectedIds.size === 0) {
+      setError({ error: "Select at least one meter." });
+      return;
+    }
+
+    setAssignLoading(true);
+    try {
+      const meterIds = Array.from(selectedIds);
+      await unassignMetersApi({ meterIds });
+
+      setSuccess(`Unassigned ${meterIds.length} meter(s).`);
+      clearSelection();
+      setReloadKey((k) => k + 1);
+    } catch (e) {
+      setError(e);
+    } finally {
+      setAssignLoading(false);
+    }
   }
 
-  setAssignLoading(true);
-  try {
-    const meterIds = Array.from(selectedIds);
-
-    
-    await unassignMetersApi({ meterIds });
-
-    setSuccess(`Unassigned ${meterIds.length} meter(s).`);
-    clearSelection();
-
-    // if you added reloadKey earlier:
-   setReloadKey((k) => k + 1);
-  } catch (e) {
-    setError(e);
-  } finally {
-    setAssignLoading(false);
-  }
-}
   /** Client-side filtering for header filters */
   const metersFiltered = useMemo(() => {
     let out = metersRaw;
@@ -917,10 +1145,8 @@ async function unassignSelected() {
     const sortBy = applied.sortBy;
     const sortDir = applied.sortDir;
 
-    // If backend can sort it, it already did; return as-is.
     if (SORTABLE_SET.has(sortBy)) return metersFiltered;
 
-    // Fallback: sort locally
     const copy = [...metersFiltered];
     copy.sort((a, b) => {
       const av = normalizeStr(getColumnValue(a, sortBy));
@@ -933,6 +1159,473 @@ async function unassignSelected() {
     });
     return copy;
   }, [metersFiltered, applied.sortBy, applied.sortDir]);
+
+  /** ---------- Columns: config + prefs + presets + resize + reorder + pin ---------- */
+
+  const COLS = useMemo(() => {
+    const cols = [];
+
+    if (canAssign) {
+      cols.push({
+        id: "select",
+        label: "",
+        width: 46,
+        minWidth: 46,
+        maxWidth: 46,
+        disableHide: true,
+        disableResize: true,
+        disableReorder: true,
+        pin: "left",
+      });
+    }
+
+    cols.push({
+      id: "actions",
+      label: "Actions",
+      width: 92,
+      minWidth: 86,
+      maxWidth: 140,
+      disableHide: true,
+      pin: "left", // ✅ pinned
+    });
+
+    cols.push({
+      id: "electronicId",
+      label: "Electronic ID",
+      sortKey: "electronicId",
+      filterKey: "electronicId",
+      width: 150,
+      minWidth: 130,
+      maxWidth: 320,
+      pin: "left", // ✅ pinned
+    });
+
+    cols.push({
+      id: "accountNumber",
+      label: "Account #",
+      sortKey: "accountNumber",
+      filterKey: "accountNumber",
+      width: 130,
+      minWidth: 120,
+      maxWidth: 260,
+    });
+
+    cols.push({
+      id: "meterSerialNumber",
+      label: "Serial #",
+      sortKey: "meterSerialNumber",
+      filterKey: "meterSerialNumber",
+      width: 120,
+      minWidth: 110,
+      maxWidth: 260,
+    });
+
+    cols.push({
+      id: "customerName",
+      label: "Customer",
+      sortKey: "customerName",
+      filterKey: "customerName",
+      width: 160,
+      minWidth: 140,
+      maxWidth: 320,
+    });
+
+    cols.push({
+      id: "address",
+      label: "Address",
+      sortKey: "address",
+      filterKey: "address",
+      width: 240,
+      minWidth: 180,
+      maxWidth: 560,
+    });
+
+    cols.push({
+      id: "route",
+      label: "Route",
+      sortKey: "route",
+      filterKey: "route",
+      width: 90,
+      minWidth: 80,
+      maxWidth: 160,
+    });
+
+    cols.push({
+      id: "latitude",
+      label: "Lat",
+      filterKey: "latitude",
+      width: 110,
+      minWidth: 90,
+      maxWidth: 180,
+    });
+
+    cols.push({
+      id: "longitude",
+      label: "Lng",
+      filterKey: "longitude",
+      width: 110,
+      minWidth: 90,
+      maxWidth: 180,
+    });
+
+    cols.push({
+      id: "meterSize",
+      label: "Meter Size",
+      sortKey: "meterSize",
+      filterKey: "meterSize",
+      width: 110,
+      minWidth: 90,
+      maxWidth: 200,
+    });
+
+    cols.push({
+      id: "numberOfPictures",
+      label: "# Pics",
+      sortKey: "numberOfPictures",
+      filterKey: "numberOfPictures",
+      width: 80,
+      minWidth: 70,
+      maxWidth: 140,
+    });
+
+    cols.push({
+      id: "locationNotes",
+      label: "Notes",
+      filterKey: "locationNotes",
+      width: 260,
+      minWidth: 180,
+      maxWidth: 700,
+    });
+
+    cols.push({
+      id: "assignedTo",
+      label: "Assigned To",
+      filterKey: "assignedTo",
+      width: 220,
+      minWidth: 180,
+      maxWidth: 460,
+    });
+
+    // Optional “audit” columns (you already support sorting server-side)
+    cols.push({
+      id: "lastApprovedUpdateAt",
+      label: "Last Approved",
+      sortKey: "lastApprovedUpdateAt",
+      filterKey: "lastApprovedUpdateAt",
+      width: 150,
+      minWidth: 130,
+      maxWidth: 260,
+    });
+
+    cols.push({
+      id: "createdAt",
+      label: "Created",
+      sortKey: "createdAt",
+      filterKey: "createdAt",
+      width: 150,
+      minWidth: 130,
+      maxWidth: 260,
+    });
+
+    cols.push({
+      id: "updatedAt",
+      label: "Updated",
+      sortKey: "updatedAt",
+      filterKey: "updatedAt",
+      width: 150,
+      minWidth: 130,
+      maxWidth: 260,
+    });
+
+    return cols;
+  }, [canAssign]);
+
+  const colById = useMemo(
+    () => Object.fromEntries(COLS.map((c) => [c.id, c])),
+    [COLS],
+  );
+
+  const tablePrefsKey = useMemo(
+    () =>
+      `metersTablePrefs:v2:${scopeKey}:${role || "unknown"}:${canAssign ? "admin" : "tech"}`,
+    [scopeKey, role, canAssign],
+  );
+
+  const defaultOrder = useMemo(() => COLS.map((c) => c.id), [COLS]);
+
+  // default visibility keeps your current UI (everything on)
+  const defaultVisibility = useMemo(() => {
+    const v = {};
+    for (const c of COLS) v[c.id] = true;
+
+    // Make audit columns hidden by default (you can show via preset)
+    v.lastApprovedUpdateAt = false;
+    v.createdAt = false;
+    v.updatedAt = false;
+
+    return v;
+  }, [COLS]);
+
+  const defaultWidths = useMemo(() => {
+    const w = {};
+    for (const c of COLS) w[c.id] = c.width ?? 160;
+    return w;
+  }, [COLS]);
+
+  const [colOrder, setColOrder] = useState(defaultOrder);
+  const [colVisibility, setColVisibility] = useState(defaultVisibility);
+  const [colWidths, setColWidths] = useState(defaultWidths);
+
+  // Preset selector state (UI)
+  const [presetId, setPresetId] = useState("audit");
+
+  // Load prefs per role/scope
+  useEffect(() => {
+    const saved = loadTablePrefs(tablePrefsKey);
+    if (!saved) {
+      setColOrder(defaultOrder);
+      setColVisibility(defaultVisibility);
+      setColWidths(defaultWidths);
+      return;
+    }
+
+    const ids = new Set(defaultOrder);
+
+    const order = Array.isArray(saved.order)
+      ? saved.order.filter((id) => ids.has(id))
+      : [];
+    for (const id of defaultOrder) if (!order.includes(id)) order.push(id);
+
+    const visibility = { ...defaultVisibility, ...(saved.visibility || {}) };
+    for (const c of COLS) if (c.disableHide) visibility[c.id] = true;
+
+    const widths = { ...defaultWidths, ...(saved.widths || {}) };
+    for (const c of COLS) {
+      const minW = c.minWidth ?? 60;
+      const maxW = c.maxWidth ?? 900;
+      widths[c.id] = clamp(
+        Number(widths[c.id] || defaultWidths[c.id]),
+        minW,
+        maxW,
+      );
+    }
+
+    setColOrder(order);
+    setColVisibility(visibility);
+    setColWidths(widths);
+  }, [tablePrefsKey, COLS, defaultOrder, defaultVisibility, defaultWidths]);
+
+  // Save prefs
+  useEffect(() => {
+    saveTablePrefs(tablePrefsKey, {
+      order: colOrder,
+      visibility: colVisibility,
+      widths: colWidths,
+    });
+  }, [tablePrefsKey, colOrder, colVisibility, colWidths]);
+
+  const visibleCols = useMemo(() => {
+    return colOrder
+      .map((id) => colById[id])
+      .filter(Boolean)
+      .filter((c) => (c.disableHide ? true : colVisibility[c.id] !== false));
+  }, [colOrder, colById, colVisibility]);
+
+  // Sticky/pinned left offsets (Actions + EID pinned; Selection pinned too for admin)
+  const stickyLeftById = useMemo(() => {
+    let left = 0;
+    const map = {};
+    for (const c of visibleCols) {
+      if (c.pin === "left") {
+        map[c.id] = left;
+        left += Number(colWidths[c.id] ?? c.width ?? 160);
+      }
+    }
+    return map;
+  }, [visibleCols, colWidths]);
+
+  function stickyStylesFor(colId, isHeader) {
+    const left = stickyLeftById[colId];
+    if (left === undefined) return null;
+
+    return {
+      position: "sticky",
+      left,
+      zIndex: isHeader ? 8 : 3,
+      background: isHeader
+        ? "rgba(10, 18, 35, 0.95)"
+        : "rgba(10, 18, 35, 0.88)",
+      backdropFilter: "blur(6px)",
+      boxShadow: "1px 0 0 rgba(255,255,255,0.06)",
+    };
+  }
+
+  // Column resize
+  function startResize(colId, e) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const c = colById[colId];
+    if (!c || c.disableResize) return;
+
+    const startX = e.clientX;
+    const startW = Number(colWidths[colId] || c.width || 160);
+    const minW = c.minWidth ?? 25;
+    const maxW = c.maxWidth ?? 900;
+
+    function onMove(ev) {
+      const dx = ev.clientX - startX;
+      const next = clamp(startW + dx, minW, maxW);
+      setColWidths((prev) => ({ ...prev, [colId]: next }));
+    }
+
+    function onUp() {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    }
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
+
+  function resetWidth(colId) {
+    const c = colById[colId];
+    if (!c) return;
+    setColWidths((prev) => ({ ...prev, [colId]: c.width ?? prev[colId] }));
+  }
+
+  // Column reorder (drag headers)
+  const [dragColId, setDragColId] = useState("");
+
+  function onDragStartCol(colId, e) {
+    const c = colById[colId];
+    if (!c || c.disableReorder) return;
+    setDragColId(colId);
+    e.dataTransfer.effectAllowed = "move";
+  }
+
+  function onDropCol(targetId) {
+    if (!dragColId || dragColId === targetId) return;
+    setColOrder((prev) => moveItem(prev, dragColId, targetId));
+    setDragColId("");
+  }
+
+  // Presets: order + visibility + widths
+  function applyPreset(nextPresetId) {
+    const allIds = COLS.map((c) => c.id);
+
+    // helpers
+    const makeVisibility = (showIds) => {
+      const v = {};
+      for (const id of allIds) v[id] = showIds.includes(id);
+      // force not hideable columns
+      for (const c of COLS) if (c.disableHide) v[c.id] = true;
+      return v;
+    };
+
+    // Default order (pinned cols first, then the rest)
+    const baseOrder = (ids) => {
+      // keep pinned at very front in their current presence
+      const pinned = ids.filter((id) => colById[id]?.pin === "left");
+      const rest = ids.filter((id) => colById[id]?.pin !== "left");
+      return [...pinned, ...rest];
+    };
+
+    if (nextPresetId === "encore") {
+      // compact ops table (like Encore: main identifiers + routing + gps + size + pics)
+      const show = [
+        ...(canAssign ? ["select"] : []),
+        "actions",
+        "electronicId",
+        "accountNumber",
+        "meterSerialNumber",
+        "customerName",
+        "address",
+        "route",
+        "latitude",
+        "longitude",
+        "meterSize",
+        "numberOfPictures",
+      ];
+
+      setColVisibility(makeVisibility(show));
+      setColOrder(baseOrder(show));
+      setColWidths((prev) => ({
+        ...prev,
+        address: 280,
+        customerName: 180,
+        meterSerialNumber: 130,
+      }));
+      setPresetId("encore");
+      return;
+    }
+
+    if (nextPresetId === "gps") {
+      // GPS cleanup: focus on location fields + route
+      const show = [
+        ...(canAssign ? ["select"] : []),
+        "actions",
+        "electronicId",
+        "accountNumber",
+        "customerName",
+        "address",
+        "route",
+        "latitude",
+        "longitude",
+        "locationNotes",
+        "numberOfPictures",
+        "lastApprovedUpdateAt",
+      ];
+
+      setColVisibility(makeVisibility(show));
+      setColOrder(baseOrder(show));
+      setColWidths((prev) => ({
+        ...prev,
+        address: 320,
+        locationNotes: 320,
+      }));
+      setPresetId("gps");
+      return;
+    }
+
+    // audit (all — but keep the “audit columns” visible)
+    const show = [
+      ...(canAssign ? ["select"] : []),
+      "actions",
+      "electronicId",
+      "accountNumber",
+      "meterSerialNumber",
+      "customerName",
+      "address",
+      "route",
+      "latitude",
+      "longitude",
+      "meterSize",
+      "numberOfPictures",
+      "locationNotes",
+      "assignedTo",
+      "lastApprovedUpdateAt",
+      "createdAt",
+      "updatedAt",
+    ];
+
+    setColVisibility(makeVisibility(show));
+    setColOrder(baseOrder(show));
+    setColWidths((prev) => ({
+      ...prev,
+      address: 320,
+      locationNotes: 360,
+      assignedTo: 240,
+    }));
+    setPresetId("audit");
+  }
+
+  function resetLayout() {
+    setColOrder(defaultOrder);
+    setColVisibility(defaultVisibility);
+    setColWidths(defaultWidths);
+    setPresetId("audit");
+  }
 
   const hasFiltersApplied = filterPills.length > 0;
 
@@ -1106,7 +1799,7 @@ async function unassignSelected() {
             <div className="field">
               <div className="field-label">Sort</div>
               <div className="muted" style={{ paddingTop: 10 }}>
-                Click column headers to sort (asc/desc).
+                Click sortable column headers to sort (asc/desc).
               </div>
               <div className="field-hint" />
             </div>
@@ -1193,7 +1886,16 @@ async function unassignSelected() {
             </div>
           ) : null}
 
-          <div className="meters-meta" style={{ marginBottom: 10 }}>
+          <div
+            className="meters-meta"
+            style={{
+              marginBottom: 10,
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              flexWrap: "wrap",
+            }}
+          >
             <span className="muted">
               Showing <strong>{startIndex}</strong>–<strong>{endIndex}</strong>{" "}
               of <strong>{total}</strong>
@@ -1212,6 +1914,18 @@ async function unassignSelected() {
                 on this page
               </span>
             ) : null}
+
+            <div style={{ marginLeft: "auto" }}>
+              <ColumnsPopover
+                columns={COLS}
+                visibility={colVisibility}
+                setVisibility={setColVisibility}
+                onReset={resetLayout}
+                presetId={presetId}
+                setPresetId={setPresetId}
+                onApplyPreset={applyPreset}
+              />
+            </div>
           </div>
 
           <Pagination
@@ -1240,438 +1954,147 @@ async function unassignSelected() {
             </div>
           ) : null}
 
-          <div className="table-wrap">
-            <table className="table meters-table">
+          <div className="table-wrap" style={{ overflowX: "auto" }}>
+            <table
+              className="table meters-table"
+              style={{
+                tableLayout: "fixed",
+                width: "max-content",
+                minWidth: "100%",
+              }}
+            >
               <thead>
                 <tr>
-                  {canAssign ? (
-                    <th style={{ width: 46 }}>
-                      <input
-                        type="checkbox"
-                        checked={allOnPageSelected}
-                        onChange={toggleSelectAllOnPage}
-                        title="Select all meters on this page"
-                      />
-                    </th>
-                  ) : null}
+                  {visibleCols.map((c) => {
+                    const w = Number(colWidths[c.id] ?? c.width ?? 160);
 
-                  <th>Actions</th>
+                    const thBaseStyle = {
+                      width: w,
+                      minWidth: c.minWidth,
+                      maxWidth: c.maxWidth,
+                      userSelect: "none",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                      ...(stickyStylesFor(c.id, true) || {}),
+                    };
 
-                  {/* Electronic ID */}
-                  <th
-                    className={`sortable ${isActiveHeaderFilter(headerFilters.electronicId) ? "is-filtered" : ""}`}
-                    onClick={() => toggleSort("electronicId")}
-                  >
-                    <span
-                      className="th-head"
-                      style={{
-                        onClick: (e) => e.stopPropagation(),
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 6,
-                      }}
-                    >
-                      Electronic ID{sortGlyph("electronicId")}
-                      <HeaderFilterPopover
-                        fieldKey="electronicId"
-                        label="Electronic ID"
-                        value={headerFilters.electronicId}
-                        disabled={false}
-                        onChange={(next) =>
-                          setHeaderFilters((p) => ({
-                            ...p,
-                            electronicId: next,
-                          }))
-                        }
-                        onClear={() =>
-                          setHeaderFilters((p) => ({
-                            ...p,
-                            electronicId: { op: "contains", value: "" },
-                          }))
-                        }
-                      />
-                    </span>
-                  </th>
+                    const isSortable =
+                      Boolean(c.sortKey) && SORTABLE_SET.has(c.sortKey);
 
-                  {/* Account # */}
-                  <th
-                    className="sortable"
-                    onClick={() => toggleSort("accountNumber")}
-                    title="Click to sort"
-                  >
-                    <span
-                      className="th-head"
-                      style={{
-                        onClick: (e) => e.stopPropagation(),
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 6,
-                      }}
-                    >
-                      Account #{sortGlyph("accountNumber")}
-                      <HeaderFilterPopover
-                        fieldKey="accountNumber"
-                        label="Account #"
-                        value={headerFilters.accountNumber}
-                        disabled={false}
-                        onChange={(next) =>
-                          setHeaderFilters((p) => ({
-                            ...p,
-                            accountNumber: next,
-                          }))
+                    return (
+                      <th
+                        key={c.id}
+                        style={thBaseStyle}
+                        onDragOver={(e) => {
+                          if (dragColId && dragColId !== c.id)
+                            e.preventDefault();
+                        }}
+                        onDrop={() => onDropCol(c.id)}
+                        title={
+                          c.pin === "left"
+                            ? "Pinned"
+                            : "Drag to reorder • drag edge to resize"
                         }
-                        onClear={() =>
-                          setHeaderFilters((p) => ({
-                            ...p,
-                            accountNumber: { op: "contains", value: "" },
-                          }))
-                        }
-                      />
-                    </span>
-                  </th>
+                      >
+                        <div
+                          style={{
+                            position: "relative",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 8,
+                            paddingRight: c.disableResize ? 0 : 10,
+                          }}
+                        >
+                          {/* drag handle */}
+                          {!c.disableReorder ? (
+                            <span
+                              draggable
+                              onDragStart={(e) => onDragStartCol(c.id, e)}
+                              style={{
+                                cursor: "grab",
+                                opacity: 0.7,
+                                fontSize: 14,
+                                lineHeight: 1,
+                              }}
+                              title="Drag to reorder"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              ⠿
+                            </span>
+                          ) : (
+                            <span style={{ width: 14 }} />
+                          )}
 
-                  {/* Serial # */}
-                  <th
-                    className="sortable"
-                    onClick={() => toggleSort("meterSerialNumber")}
-                    title="Click to sort"
-                  >
-                    <span
-                      className="th-head"
-                      style={{
-                        onClick: (e) => e.stopPropagation(),
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 6,
-                      }}
-                    >
-                      Serial #{sortGlyph("meterSerialNumber")}
-                      <HeaderFilterPopover
-                        fieldKey="meterSerialNumber"
-                        label="Serial #"
-                        value={headerFilters.meterSerialNumber}
-                        disabled={false}
-                        onChange={(next) =>
-                          setHeaderFilters((p) => ({
-                            ...p,
-                            meterSerialNumber: next,
-                          }))
-                        }
-                        onClear={() =>
-                          setHeaderFilters((p) => ({
-                            ...p,
-                            meterSerialNumber: { op: "contains", value: "" },
-                          }))
-                        }
-                      />
-                    </span>
-                  </th>
+                          {/* header content */}
+                          {c.id === "select" ? (
+                            <input
+                              type="checkbox"
+                              checked={allOnPageSelected}
+                              onChange={toggleSelectAllOnPage}
+                              title="Select all meters on this page"
+                            />
+                          ) : c.id === "actions" ? (
+                            <span style={{ fontWeight: 800 }}>Actions</span>
+                          ) : isSortable ? (
+                            <button
+                              type="button"
+                              onClick={() => toggleSort(c.sortKey)}
+                              className="th-sort-btn"
+                              style={{
+                                background: "transparent",
+                                border: 0,
+                                padding: 0,
+                                color: "rgba(255,255,255,0.92)",
+                                cursor: "pointer",
+                                fontWeight: 800,
+                                textAlign: "left",
+                              }}
+                              title="Click to sort"
+                            >
+                              {c.label}
+                              {sortGlyph(c.sortKey)}
+                            </button>
+                          ) : (
+                            <span style={{ fontWeight: 800 }}>{c.label}</span>
+                          )}
 
-                  {/* Customer */}
-                  <th
-                    className="sortable"
-                    onClick={() => toggleSort("customerName")}
-                    title="Click to sort"
-                  >
-                    <span
-                      className="th-head"
-                      style={{
-                        onClick: (e) => e.stopPropagation(),
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 6,
-                      }}
-                    >
-                      Customer{sortGlyph("customerName")}
-                      <HeaderFilterPopover
-                        fieldKey="customerName"
-                        label="Customer"
-                        value={headerFilters.customerName}
-                        disabled={false}
-                        onChange={(next) =>
-                          setHeaderFilters((p) => ({
-                            ...p,
-                            customerName: next,
-                          }))
-                        }
-                        onClear={() =>
-                          setHeaderFilters((p) => ({
-                            ...p,
-                            customerName: { op: "contains", value: "" },
-                          }))
-                        }
-                      />
-                    </span>
-                  </th>
+                          {/* filter */}
+                          {c.filterKey ? (
+                            <HeaderFilterPopover
+                              fieldKey={c.filterKey}
+                              label={c.label}
+                              value={headerFilters[c.filterKey]}
+                              disabled={false}
+                              onChange={(next) =>
+                                setHeaderFilters((p) => ({
+                                  ...p,
+                                  [c.filterKey]: next,
+                                }))
+                              }
+                              onClear={() =>
+                                setHeaderFilters((p) => ({
+                                  ...p,
+                                  [c.filterKey]: { op: "contains", value: "" },
+                                }))
+                              }
+                            />
+                          ) : null}
 
-                  {/* Address */}
-                  <th
-                    className="sortable"
-                    onClick={() => toggleSort("address")}
-                    title="Click to sort"
-                  >
-                    <span
-                      className="th-head"
-                      style={{
-                        onClick: (e) => e.stopPropagation(),
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 6,
-                      }}
-                    >
-                      Address{sortGlyph("address")}
-                      <HeaderFilterPopover
-                        fieldKey="address"
-                        label="Address"
-                        value={headerFilters.address}
-                        disabled={false}
-                        onChange={(next) =>
-                          setHeaderFilters((p) => ({ ...p, address: next }))
-                        }
-                        onClear={() =>
-                          setHeaderFilters((p) => ({
-                            ...p,
-                            address: { op: "contains", value: "" },
-                          }))
-                        }
-                      />
-                    </span>
-                  </th>
-
-                  {/* Route */}
-                  <th
-                    className="sortable"
-                    onClick={() => toggleSort("route")}
-                    title="Click to sort"
-                  >
-                    <span
-                      className="th-head"
-                      style={{
-                        onClick: (e) => e.stopPropagation(),
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 6,
-                      }}
-                    >
-                      Route{sortGlyph("route")}
-                      <HeaderFilterPopover
-                        fieldKey="route"
-                        label="Route"
-                        value={headerFilters.route}
-                        disabled={false}
-                        onChange={(next) =>
-                          setHeaderFilters((p) => ({ ...p, route: next }))
-                        }
-                        onClear={() =>
-                          setHeaderFilters((p) => ({
-                            ...p,
-                            route: { op: "contains", value: "" },
-                          }))
-                        }
-                      />
-                    </span>
-                  </th>
-
-                  {/* Lat / Lng */}
-                  <th
-                    title="Click to sort"
-                    className="sortable"
-                    onClick={() => toggleSort("latitude")}
-                  >
-                    <span
-                      className="th-head"
-                      style={{
-                        onClick: (e) => e.stopPropagation(),
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 6,
-                      }}
-                    >
-                      Lat{sortGlyph("latitude")}
-                      <HeaderFilterPopover
-                        fieldKey="latitude"
-                        label="Lat"
-                        value={headerFilters.latitude}
-                        disabled={false}
-                        onChange={(next) =>
-                          setHeaderFilters((p) => ({ ...p, latitude: next }))
-                        }
-                        onClear={() =>
-                          setHeaderFilters((p) => ({
-                            ...p,
-                            latitude: { op: "contains", value: "" },
-                          }))
-                        }
-                      />
-                    </span>
-                  </th>
-
-                  <th
-                    title="Click to sort"
-                    className="sortable"
-                    onClick={() => toggleSort("longitude")}
-                  >
-                    <span
-                      className="th-head"
-                      style={{
-                        onClick: (e) => e.stopPropagation(),
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 6,
-                      }}
-                    >
-                      Lng{sortGlyph("longitude")}
-                      <HeaderFilterPopover
-                        fieldKey="longitude"
-                        label="Lng"
-                        value={headerFilters.longitude}
-                        disabled={false}
-                        onChange={(next) =>
-                          setHeaderFilters((p) => ({ ...p, longitude: next }))
-                        }
-                        onClear={() =>
-                          setHeaderFilters((p) => ({
-                            ...p,
-                            longitude: { op: "contains", value: "" },
-                          }))
-                        }
-                      />
-                    </span>
-                  </th>
-
-                  {/* Meter Size */}
-                  <th
-                    className="sortable"
-                    onClick={() => toggleSort("meterSize")}
-                    title="Click to sort"
-                  >
-                    <span
-                      className="th-head"
-                      style={{
-                        onClick: (e) => e.stopPropagation(),
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 6,
-                      }}
-                    >
-                      Meter Size{sortGlyph("meterSize")}
-                      <HeaderFilterPopover
-                        fieldKey="meterSize"
-                        label="Meter Size"
-                        value={headerFilters.meterSize}
-                        disabled={false}
-                        onChange={(next) =>
-                          setHeaderFilters((p) => ({ ...p, meterSize: next }))
-                        }
-                        onClear={() =>
-                          setHeaderFilters((p) => ({
-                            ...p,
-                            meterSize: { op: "contains", value: "" },
-                          }))
-                        }
-                      />
-                    </span>
-                  </th>
-
-                  {/* # Pics */}
-                  <th
-                    className="sortable"
-                    onClick={() => toggleSort("numberOfPictures")}
-                    title="Click to sort"
-                  >
-                    <span
-                      className="th-head"
-                      style={{
-                        onClick: (e) => e.stopPropagation(),
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 6,
-                      }}
-                    >
-                      # Pics{sortGlyph("numberOfPictures")}
-                      <HeaderFilterPopover
-                        fieldKey="numberOfPictures"
-                        label="# Pics"
-                        value={headerFilters.numberOfPictures}
-                        disabled={false}
-                        onChange={(next) =>
-                          setHeaderFilters((p) => ({
-                            ...p,
-                            numberOfPictures: next,
-                          }))
-                        }
-                        onClear={() =>
-                          setHeaderFilters((p) => ({
-                            ...p,
-                            numberOfPictures: { op: "contains", value: "" },
-                          }))
-                        }
-                      />
-                    </span>
-                  </th>
-
-                  {/* Notes */}
-                  <th title="Notes">
-                    <span
-                      className="th-head"
-                      style={{
-                        onClick: (e) => e.stopPropagation(),
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 6,
-                      }}
-                    >
-                      Notes
-                      <HeaderFilterPopover
-                        fieldKey="locationNotes"
-                        label="Notes"
-                        value={headerFilters.locationNotes}
-                        disabled={false}
-                        onChange={(next) =>
-                          setHeaderFilters((p) => ({
-                            ...p,
-                            locationNotes: next,
-                          }))
-                        }
-                        onClear={() =>
-                          setHeaderFilters((p) => ({
-                            ...p,
-                            locationNotes: { op: "contains", value: "" },
-                          }))
-                        }
-                      />
-                    </span>
-                  </th>
-
-                  {/* Assigned To */}
-                  <th title="Assigned">
-                    <span
-                      className="th-head"
-                      style={{
-                        onClick: (e) => e.stopPropagation(),
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 6,
-                      }}
-                    >
-                      Assigned To
-                      <HeaderFilterPopover
-                        fieldKey="assignedTo"
-                        label="Assigned"
-                        value={headerFilters.assignedTo}
-                        disabled={false}
-                        onChange={(next) =>
-                          setHeaderFilters((p) => ({ ...p, assignedTo: next }))
-                        }
-                        onClear={() =>
-                          setHeaderFilters((p) => ({
-                            ...p,
-                            assignedTo: { op: "contains", value: "" },
-                          }))
-                        }
-                      />
-                    </span>
-                  </th>
+                          {/* resize handle */}
+                          {!c.disableResize ? (
+                            <div
+                              className="col-resize-affordance"
+                              onMouseDown={(e) => startResize(c.id, e)}
+                              onDoubleClick={() => autoShrinkColumn(c.id)}
+                              title="Drag to resize • double-click to shrink to fit"
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          ) : null}
+                        </div>
+                      </th>
+                    );
+                  })}
                 </tr>
               </thead>
 
@@ -1689,66 +2112,106 @@ async function unassignSelected() {
                         selected ? "row-selected" : "",
                       ].join(" ")}
                     >
-                      {canAssign ? (
-                        <td>
-                          {mid ? (
-                            <input
-                              type="checkbox"
-                              checked={selected}
-                              onChange={() => toggleRowSelection(mid)}
-                              title="Select meter"
-                            />
-                          ) : null}
-                        </td>
-                      ) : null}
+                      {visibleCols.map((c) => {
+                        const tdBaseStyle = {
+                          width: Number(colWidths[c.id] ?? c.width ?? 160),
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                          ...(stickyStylesFor(c.id, false) || {}),
+                        };
 
-                      <td>
-                        {mid ? (
-                          <div className="row" style={{ gap: 10 }}>
-                            <Link
-                              to={`/meters/${encodeURIComponent(mid)}/updates`}
+                        // cell render
+                        if (c.id === "select") {
+                          return (
+                            <td key={`${rowKey}:select`} style={tdBaseStyle}>
+                              {mid ? (
+                                <input
+                                  type="checkbox"
+                                  checked={selected}
+                                  onChange={() => toggleRowSelection(mid)}
+                                  title="Select meter"
+                                />
+                              ) : null}
+                            </td>
+                          );
+                        }
+
+                        if (c.id === "actions") {
+                          return (
+                            <td key={`${rowKey}:actions`} style={tdBaseStyle}>
+                              {mid ? (
+                                <Link
+                                  to={`/meters/${encodeURIComponent(mid)}/updates`}
+                                >
+                                  Update
+                                </Link>
+                              ) : (
+                                <span className="muted">—</span>
+                              )}
+                            </td>
+                          );
+                        }
+
+                        if (c.id === "electronicId") {
+                          return (
+                            <td key={`${rowKey}:eid`} style={tdBaseStyle}>
+                              {mid ? (
+                                <Link to={`/meters/${encodeURIComponent(mid)}`}>
+                                  {m?.electronicId ?? "—"}
+                                </Link>
+                              ) : (
+                                (m?.electronicId ?? "—")
+                              )}
+                            </td>
+                          );
+                        }
+
+                        if (c.id === "locationNotes") {
+                          return (
+                            <td
+                              key={`${rowKey}:notes`}
+                              style={{
+                                ...tdBaseStyle,
+                                whiteSpace: "normal",
+                                lineHeight: 1.25,
+                              }}
                             >
-                              Update
-                            </Link>
-                          </div>
-                        ) : (
-                          <span className="muted">—</span>
-                        )}
-                      </td>
+                              {m?.locationNotes ?? ""}
+                            </td>
+                          );
+                        }
 
-                      <td>
-                        {mid ? (
-                          <Link to={`/meters/${encodeURIComponent(mid)}`}>
-                            {m?.electronicId ?? "—"}
-                          </Link>
-                        ) : (
-                          (m?.electronicId ?? "—")
-                        )}
-                      </td>
+                        if (c.id === "assignedTo") {
+                          return (
+                            <td
+                              key={`${rowKey}:assigned`}
+                              style={{ ...tdBaseStyle, whiteSpace: "normal" }}
+                            >
+                              {m?.assignedTo?.name ? (
+                                <>
+                                  <div>{m.assignedTo.name}</div>
+                                  <div
+                                    className="muted"
+                                    style={{ fontSize: 12 }}
+                                  >
+                                    {m.assignedTo.email}
+                                  </div>
+                                </>
+                              ) : (
+                                <span className="muted">Unassigned</span>
+                              )}
+                            </td>
+                          );
+                        }
 
-                      <td>{m?.accountNumber ?? ""}</td>
-                      <td>{m?.meterSerialNumber ?? ""}</td>
-                      <td>{m?.customerName ?? ""}</td>
-                      <td>{m?.address ?? ""}</td>
-                      <td>{m?.route ?? ""}</td>
-                      <td>{m?.latitude ?? ""}</td>
-                      <td>{m?.longitude ?? ""}</td>
-                      <td>{m?.meterSize ?? ""}</td>
-                      <td>{m?.numberOfPictures ?? ""}</td>
-                      <td className="cell-wrap">{m?.locationNotes ?? ""}</td>
-
-                      <td className="assigned-wrap">
-                        {m?.assignedTo?.name ? (
-                          <>
-                            <div>{m.assignedTo.name}</div>
-                            <div className="muted" style={{ fontSize: 12 }}>
-                              {m.assignedTo.email}
-                            </div>
-                          </>
-                        ) : (
-                          <span className="muted">Unassigned</span>
-                        )}
-                      </td>
+                        const val = getColumnValue(m, c.id);
+                        return (
+                          <td key={`${rowKey}:${c.id}`} style={tdBaseStyle}>
+                            {normalizeStr(val)}
+                          </td>
+                        );
+                      })}
                     </tr>
                   );
                 })}

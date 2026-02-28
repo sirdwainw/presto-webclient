@@ -1,10 +1,15 @@
 // src/components/AppLayout.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
+import {
+  Link,
+  NavLink,
+  Outlet,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { listMetersQuickApi } from "../api/meters.api";
 import { getEntityId } from "../api/apiClient";
-import { globalMeterSearchApi } from "../api/globalSearch.api";
 
 function NavItem({ to, children, end }) {
   return (
@@ -24,14 +29,15 @@ function formatMeterLabel(m) {
   const addr = m?.address ?? "";
   const cust = m?.customerName ?? "";
   const route = m?.route ?? "";
-  const parts = [
+  return [
     eid ? `EID ${eid}` : "",
     acct ? `Acct ${acct}` : "",
     addr,
     cust ? `(${cust})` : "",
     route ? `• Route ${route}` : "",
-  ].filter(Boolean);
-  return parts.join(" ");
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 
 function useDebouncedValue(value, delayMs = 250) {
@@ -47,12 +53,10 @@ function GlobalMeterSearch() {
   const nav = useNavigate();
   const [q, setQ] = useState("");
   const dq = useDebouncedValue(q, 250);
-
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [items, setItems] = useState([]);
-
   const wrapRef = useRef(null);
 
   useEffect(() => {
@@ -115,7 +119,7 @@ function GlobalMeterSearch() {
             top: 44,
             left: 0,
             right: 0,
-            zIndex: 50,
+            zIndex: 1300,
             padding: 8,
             maxHeight: 320,
             overflow: "auto",
@@ -133,13 +137,11 @@ function GlobalMeterSearch() {
               {err}
             </div>
           ) : null}
-
           {!busy && !err && items.length === 0 ? (
             <div className="muted" style={{ padding: 8 }}>
               No matches.
             </div>
           ) : null}
-
           {!busy && !err && items.length ? (
             <div className="stack" style={{ gap: 6 }}>
               {items.map((m, idx) => {
@@ -155,12 +157,8 @@ function GlobalMeterSearch() {
                       if (!id) return;
                       setOpen(false);
                       setQ("");
-                      // Choose where you want to land:
                       nav(`/meters/${encodeURIComponent(id)}`);
-                      // or updates page:
-                      // nav(`/meters/${encodeURIComponent(id)}/updates`);
                     }}
-                    title="Go to meter"
                   >
                     {formatMeterLabel(m)}
                   </button>
@@ -177,12 +175,48 @@ function GlobalMeterSearch() {
 export function AppLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-
+  const location = useLocation();
   const role = user?.role;
+
+  const [navOpen, setNavOpen] = useState(false);
+
+  useEffect(() => {
+    setNavOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    function onKeyDown(e) {
+      if (e.key === "Escape") setNavOpen(false);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    if (navOpen) document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [navOpen]);
+
+  const displayUser = useMemo(() => {
+    const name = user?.name || "User";
+    const email = user?.email ? ` • ${user.email}` : "";
+    return `${name}${email}`;
+  }, [user?.name, user?.email]);
 
   return (
     <div className="app-shell">
       <header className="topbar">
+        <button
+          className="hamburger"
+          type="button"
+          onClick={() => setNavOpen((v) => !v)}
+        >
+          ☰
+        </button>
+
         <div className="brand">
           <Link to="/dashboard" className="brand-link">
             Presto
@@ -190,7 +224,6 @@ export function AppLayout() {
           <span className="pill">{role || "unknown"}</span>
         </div>
 
-       
         <div
           style={{
             marginLeft: 16,
@@ -204,9 +237,7 @@ export function AppLayout() {
         </div>
 
         <div className="topbar-right">
-          <span className="muted">
-            {user?.name || "User"} • {user?.email || ""}
-          </span>
+          <span className="muted">{displayUser}</span>
           <button
             className="btn"
             onClick={() => {
@@ -219,32 +250,44 @@ export function AppLayout() {
         </div>
       </header>
 
+      <div
+        className={`sidebar-overlay ${navOpen ? "show" : ""}`}
+        onClick={() => setNavOpen(false)}
+      />
+
       <div className="main">
-        <aside className="sidebar">
+        <aside className={`sidebar ${navOpen ? "open" : ""}`}>
+          <div className="sidebar-header">
+            <button
+              className="btn"
+              type="button"
+              onClick={() => setNavOpen(false)}
+            >
+              Close
+            </button>
+          </div>
+
           <nav className="nav">
             <NavItem to="/dashboard" end>
               Dashboard
             </NavItem>
             <NavItem to="/meters">Meters</NavItem>
-            
             <NavItem to="/settings">Settings</NavItem>
 
-            {role === "tech" && (
+            {role === "tech" ? (
               <>
                 <NavItem to="/tech/assignments">My Assignments</NavItem>
                 <NavItem to="/tech/updates">My Updates</NavItem>
               </>
-            )}
+            ) : null}
 
-            {(role === "admin" || role === "superadmin") && (
+            {role === "admin" || role === "superadmin" ? (
               <>
                 <NavItem to="/assignments">Assignments</NavItem>
                 <NavItem to="/review/updates">Review Queue</NavItem>
                 <NavItem to="/reports">Reports</NavItem>
               </>
-            )}
-
-           
+            ) : null}
           </nav>
         </aside>
 

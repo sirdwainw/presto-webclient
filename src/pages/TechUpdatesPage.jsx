@@ -44,7 +44,7 @@ export function TechUpdatesPage() {
   const [busyId, setBusyId] = useState("");
   const [actionError, setActionError] = useState(null);
   const [success, setSuccess] = useState("");
-
+  const dateParam = searchParams.get("date") || ""; // "today" or ""
   const updates = useMemo(() => payload?.updates || [], [payload]);
 
   function patchParams(next) {
@@ -64,6 +64,7 @@ export function TechUpdatesPage() {
         status: statusForApi,
         page,
         limit,
+        date: dateParam || undefined,
       });
       setPayload(data);
     } catch (e) {
@@ -76,7 +77,7 @@ export function TechUpdatesPage() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusParam, page, limit]);
+  }, [statusParam, dateParam, page, limit]);
 
   async function doDelete(u) {
     const id = getEntityId(u);
@@ -106,6 +107,11 @@ export function TechUpdatesPage() {
         <div className="row space-between">
           <div>
             <div className="h1">My Updates</div>
+            {dateParam === "today" ? (
+              <span className="pill" style={{ marginLeft: 8 }}>
+                Today
+              </span>
+            ) : null}
             <div className="muted">
               Your submitted / approved / rejected updates.
             </div>
@@ -131,6 +137,18 @@ export function TechUpdatesPage() {
               {label}
             </button>
           ))}
+          <button
+            className={`chip ${dateParam === "today" ? "active" : ""}`}
+            onClick={() =>
+              patchParams({
+                date: dateParam === "today" ? "" : "today",
+                page: 1,
+              })
+            }
+            disabled={loading}
+          >
+            today
+          </button>
         </div>
 
         <div className="grid grid-3" style={{ marginTop: 12 }}>

@@ -1,600 +1,12 @@
-/* Makes the Meters table feel like a real ops table */
-.meters-toolbar {
-  display: grid;
-  gap: 12px;
-}
+/* src/pages/MetersPage.css */
 
-.meters-filters {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 12px;
-}
+/* ====== FILTER PANEL / TOOLBAR LOOK ====== */
 
-@media (max-width: 1200px) {
-  .meters-filters {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-.meters-actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  align-items: center;
-}
-
-.meters-meta {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  align-items: center;
-  font-size: 12px;
-}
-
-.meters-meta code {
-  font-size: 12px;
-}
-
-.meters-table th {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  background: rgba(10, 18, 35, 0.95);
-  backdrop-filter: blur(6px);
-}
-
-.meters-table tr:nth-child(even) td {
-  background: rgba(255, 255, 255, 0.02);
-}
-
-.meters-table td {
-  vertical-align: top;
-    position: relative;
-  z-index: 1;
-}
-
-.cell-wrap {
-  max-width: 320px;
-  white-space: normal;
-  word-break: break-word;
-}
-
-.meter-primary {
-  font-weight: 800;
-}
-
-.meter-sub {
-  margin-top: 6px;
-  font-size: 12px;
-}
-
-.meter-sub a {
-  text-decoration: underline;
-}
-
-.sortable {
-  cursor: pointer;
-  user-select: none;
-}
-
-.sortable:hover {
-  text-decoration: underline;
-}
-
-.row-recent td {
-  /* “recently approved” highlight */
-  background: rgba(30, 140, 90, 0.18) !important;
-}
-.chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-}
-
-.chip {
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.9);
-  border-radius: 999px;
-  padding: 6px 10px;
-  cursor: pointer;
-  font-size: 0.9rem;
-}
-
-.chip:hover {
-  background: rgba(255, 255, 255, 0.10);
-}
-
-.chip-active {
-  border-color: rgba(255, 255, 255, 0.35);
-  background: rgba(255, 255, 255, 0.18);
-}
-
-.chip-clear {
-  opacity: 0.85;
-}
-.pill-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-}
-
-.pill {
-  border: 1px solid rgba(255,255,255,0.18);
-  background: rgba(255,255,255,0.08);
-  color: rgba(255,255,255,0.92);
-  border-radius: 999px;
-  padding: 6px 10px;
-  cursor: pointer;
-  font-size: 0.9rem;
-}
-
-.pill:hover {
-  background: rgba(255,255,255,0.12);
-}
-
-.pill-x {
-  opacity: 0.8;
-  margin-left: 6px;
-}
-/* Give pills + meta breathing room above the sticky header */
-.pill-row {
-  margin-bottom: 10px;
-}
-
-/* Sticky header sits under pills/meta (prevents overlap in some layouts) */
-.meters-table thead {
-  position: sticky;
-  top: 0;
-  z-index: 20;
-}
-
-.meters-table th {
-  position: sticky;
-  top: 0;
-  z-index: 21;         /* above rows */
-  overflow: visible;   /* allow dropdown to show */
-}
-
-/* If your table sits inside a scroll container, make sure it scrolls */
-.table-wrap {
-  overflow: auto;
-}
-
-/* Better alignment for Actions column */
-.meters-table td a {
-  text-decoration: underline;
-}
-
-/* Selected row (if you use row-selected class) */
-.row-selected td {
-  background: rgba(80, 140, 255, 0.12) !important;
-}
-
-/* Make tiny columns not explode the layout */
-.meters-table td,
-.meters-table th {
-  white-space: nowrap;
-}
-
-.meters-table td.cell-wrap {
-  white-space: normal; /* keep wrapping only where you explicitly want it */
-}
-
-/* Optional: keep action links on one line */
-.meters-table td .row {
-  white-space: nowrap;
-}
-.meters-table td:first-child a {
-  font-weight: 600;
-}
-/* Per-chip accent colors when active */
-.chip-active.chip-any {
-  border-color: rgba(255, 255, 255, 0.55);
-  background: rgba(255, 255, 255, 0.20);
-}
-
-.chip-active.chip-latlng {
-  border-color: rgba(80, 140, 255, 0.65);
-  background: rgba(80, 140, 255, 0.22);
-}
-
-.chip-active.chip-notes {
-  border-color: rgba(240, 190, 60, 0.70);
-  background: rgba(240, 190, 60, 0.22);
-}
-
-.chip-active.chip-photo {
-  border-color: rgba(220, 90, 160, 0.70);
-  background: rgba(220, 90, 160, 0.22);
-}
-
-.chip-active.chip-meterSize {
-  border-color: rgba(60, 200, 140, 0.70);
-  background: rgba(60, 200, 140, 0.22);
-}
-.chip-active { font-weight: 600; }
-/* --- FILTER PANEL POLISH --- */
-
-/* Make the top filter card feel like a panel */
 .meters-filter-panel {
-  border: 1px solid rgba(255,255,255,0.10);
+  border: 1px solid rgba(255, 255, 255, 0.10);
   background: rgba(10, 18, 35, 0.65);
-  box-shadow: 0 12px 28px rgba(0,0,0,0.25);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.25);
 }
-
-/* Give filter grids a consistent rhythm */
-.meters-filter-panel .grid {
-  row-gap: 14px;
-}
-
-/* Labels + hints tighter */
-.meters-filter-panel .field-label {
-  font-size: 12px;
-  letter-spacing: 0.02em;
-  opacity: 0.9;
-}
-
-.meters-filter-panel .field-hint {
-  font-size: 11px;
-  opacity: 0.75;
-}
-
-/* Inputs: slightly stronger borders so they read as controls */
-.meters-filter-panel .input {
-  border: 1px solid rgba(255,255,255,0.12);
-  background: rgba(255,255,255,0.06);
-}
-
-.meters-filter-panel .input:focus {
-  outline: none;
-  border-color: rgba(80, 140, 255, 0.55);
-  box-shadow: 0 0 0 3px rgba(80, 140, 255, 0.18);
-}
-
-/* Chips feel like a grouped control */
-.meters-filter-panel .chips {
-  padding: 8px;
-  border-radius: 12px;
-  border: 1px solid rgba(255,255,255,0.10);
-  background: rgba(255,255,255,0.04);
-}
-
-/* Chips: slightly smaller and more compact for a toolbar row */
-.meters-filter-panel .chip {
-  padding: 5px 10px;
-  font-size: 12px;
-}
-
-/* Actions area: right-aligned feel and spacing */
-.meters-actions-row {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.meters-actions-row .btn {
-  height: 34px;
-  padding: 0 12px;
-}
-
-/* Optional: make Apply the primary visual (only if your btn styles support it) */
-.meters-actions-row .btn-primary {
-  box-shadow: 0 10px 18px rgba(0,0,0,0.25);
-}
-
-/* Subtle divider between filter sections */
-.meters-divider {
-  height: 1px;
-  width: 100%;
-  background: rgba(255,255,255,0.08);
-  margin: 12px 0;
-}
-/* Keep filter rows aligned even when only some fields have hints */
-.meters-filter-panel .field-hint {
-  min-height: 14px;     /* reserves space so rows don't jump */
-  margin-top: 6px;
-  line-height: 14px;
-}
-
-/* If a field has no hint, keep spacing consistent */
-.meters-filter-panel .field .field-hint:empty {
-  min-height: 14px;
-}
-
-/* Optional: hide hints on narrow screens to reduce clutter */
-@media (max-width: 900px) {
-  .meters-filter-panel .field-hint {
-    display: none;
-  }
-}
-/* ---------- FIX TIP PLACEMENT / ALIGNMENT ---------- */
-
-/* Make every field lay out consistently: label, control, hint */
-.meters-filter-panel .field {
-  display: grid;
-  grid-template-rows: auto auto auto;
-  gap: 6px;
-}
-
-/* Reserve the same hint space for all fields so rows align */
-.meters-filter-panel .field-hint {
-  min-height: 14px;
-  line-height: 14px;
-  margin-top: 0;
-}
-
-/* The missing hint is allowed to wrap without breaking the grid height */
-.meters-filter-panel .field-hint.missing-hint {
-  min-height: 14px;
-  line-height: 14px;
-  white-space: normal;
-  max-width: 520px; /* prevents the long line from stretching weird */
-}
-
-/* Keep chips from forcing extra height */
-.meters-filter-panel .chips {
-  padding: 8px;
-  border-radius: 12px;
-  border: 1px solid rgba(255,255,255,0.10);
-  background: rgba(255,255,255,0.04);
-  align-items: center;
-}
-
-/* If the hint wraps to a second line, it won't push controls down as much */
-.meters-filter-panel .field-hint.missing-hint {
-  display: block;
-}
-
-/* Optional: On very wide screens, clamp hint to one line with ellipsis */
-@media (min-width: 1200px) {
-  .meters-filter-panel .field-hint.missing-hint {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 600px;
-  }
-}
-/* ---------- ASSIGNMENT TOOLBAR (Meters table assignment flow) ---------- */
-
-.table-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-
-  padding: 12px 12px;
-  margin-bottom: 10px;
-
-  border: 1px solid rgba(255,255,255,0.10);
-  background: rgba(255,255,255,0.04);
-  border-radius: 14px;
-}
-
-.toolbar-group {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.toolbar-group .input {
-  height: 36px;
-}
-
-.toolbar-group .btn {
-  height: 36px;
-  padding: 0 14px;
-}
-
-/* Make the select look “anchored” and not stretch weird */
-.table-toolbar select.input {
-  min-width: 320px;
-}
-
-/* On small screens: stack nicely */
-@media (max-width: 900px) {
-  .table-toolbar {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .table-toolbar select.input {
-    width: 100%;
-    min-width: 0;
-  }
-
-  .toolbar-group {
-    width: 100%;
-    justify-content: space-between;
-  }
-}
-
-/* ---------- TABLE LAYOUT POLISH ---------- */
-
-/* Give the table a predictable layout so one long cell doesn't blow everything up */
-.meters-table {
-  table-layout: fixed;
-  width: 100%;
-}
-
-/* Default cells: keep tight */
-.meters-table th,
-.meters-table td {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* Allow wrap only where you explicitly want it */
-.meters-table td.cell-wrap {
-  white-space: normal;
-  overflow: visible;
-  text-overflow: initial;
-}
-
-/* Assigned To column should wrap (name + email) */
-.meters-table td.assigned-wrap {
-  white-space: normal;
-  word-break: break-word;
-  max-width: 260px;
-}
-
-/* Make Actions column not waste space */
-.meters-table th:first-child,
-.meters-table td:first-child {
-  width: 46px;
-}
-
-.meters-table th:nth-child(2),
-.meters-table td:nth-child(2) {
-  width: 90px;
-}
-
-/* ---------- SCROLL + STICKY HEADER RELIABILITY ---------- */
-
-/* Ensure the scroll container is the one scrolling */
-.table-wrap {
-  overflow: auto;
-  max-height: 70vh; /* optional: keeps table usable on big datasets */
-}
-
-/* Sticky header stays readable */
-.meters-table th {
-  position: sticky;
-  top: 0;
-  z-index: 3;
-  background: rgba(10, 18, 35, 0.95);
-  backdrop-filter: blur(6px);
-}
-/* --- Assignment toolbar (Meters page) --- */
-.table-toolbar {
-  display: grid;
-  grid-template-columns: 1fr minmax(280px, 420px) auto;
-  gap: 12px;
-  align-items: center;
-  padding: 12px;
-  margin-bottom: 12px;
-  border: 1px solid rgba(255,255,255,0.10);
-  background: rgba(255,255,255,0.04);
-  border-radius: 14px;
-}
-
-.toolbar-left {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.toolbar-title {
-  font-weight: 800;
-}
-
-.toolbar-mid .input {
-  width: 100%;
-}
-
-.toolbar-right {
-  display: flex;
-  gap: 10px;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-}
-
-@media (max-width: 1100px) {
-  .table-toolbar {
-    grid-template-columns: 1fr;
-  }
-  .toolbar-right {
-    justify-content: flex-start;
-  }
-}
-/* ===== Meters filter panel: compact ops toolbar ===== */
-
-.meters-filter-panel {
-  padding: 16px;
-}
-
-/* Force a compact grid in 2 rows */
-.meters-filter-panel .grid.grid-3,
-.meters-filter-panel .grid.grid-4 {
-  display: grid;
-  gap: 12px;
-}
-
-/* Row 1: q | missing | limit */
-.meters-filter-panel .grid.grid-3 {
-  grid-template-columns: 2fr 2fr 1fr;
-  align-items: start;
-}
-
-/* Row 2: eid | acct | address | route */
-.meters-filter-panel .grid.grid-4 {
-  grid-template-columns: 1fr 1fr 2fr 1fr;
-  align-items: start;
-}
-
-/* Row 3: highlight | sort | actions */
-.meters-filter-panel .grid.grid-3:last-of-type {
-  grid-template-columns: 2fr 2fr 1fr;
-}
-
-/* Make fields not look enormous */
-.meters-filter-panel .input {
-  height: 40px;
-  border-radius: 12px;
-}
-
-/* Chips should NOT stretch across the page */
-.meters-filter-panel .chips {
-  max-width: 680px;
-  width: 100%;
-  padding: 8px;
-  border-radius: 12px;
-}
-
-/* Chips: slightly smaller */
-.meters-filter-panel .chip {
-  padding: 6px 10px;
-  font-size: 12px;
-}
-
-/* Hint line tighter */
-.meters-filter-panel .field-hint {
-  margin-top: 6px;
-  opacity: 0.75;
-}
-
-/* Actions aligned like a toolbar */
-.meters-actions-row {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  justify-content: flex-start;
-}
-
-.meters-actions-row .btn {
-  height: 40px;
-  padding: 0 14px;
-  border-radius: 12px;
-}
-
-/* Mobile: stack cleanly */
-@media (max-width: 1100px) {
-  .meters-filter-panel .grid.grid-3,
-  .meters-filter-panel .grid.grid-4 {
-    grid-template-columns: 1fr;
-  }
-
-  .meters-filter-panel .chips {
-    max-width: 100%;
-  }
-}
-/* ===== Collapsible Filters ===== */
 
 .filters {
   padding: 0;
@@ -637,10 +49,391 @@
   flex-wrap: wrap;
 }
 
+.filters-summary-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: nowrap;
+}
+
+.filters-caret {
+  opacity: 0.7;
+  transition: transform 160ms ease;
+}
+
+details[open] .filters-caret {
+  transform: rotate(180deg);
+}
+
+.filters-body {
+  padding: 0 16px 16px 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Optional: when collapsed, tighten the card */
+details.filters:not([open]) .filters-body {
+  display: none;
+}
+
+/* Field rhythm */
+.meters-filter-panel .field {
+  display: grid;
+  grid-template-rows: auto auto auto;
+  gap: 6px;
+}
+
+.meters-filter-panel .field-label {
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  opacity: 0.9;
+}
+
+.meters-filter-panel .field-hint {
+  min-height: 14px;
+  line-height: 14px;
+  font-size: 11px;
+  opacity: 0.75;
+}
+
+.meters-filter-panel .input {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  height: 40px;
+  border-radius: 12px;
+}
+
+.meters-filter-panel .input:focus {
+  outline: none;
+  border-color: rgba(80, 140, 255, 0.55);
+  box-shadow: 0 0 0 3px rgba(80, 140, 255, 0.18);
+}
+
+@media (max-width: 900px) {
+  .meters-filter-panel .field-hint {
+    display: none;
+  }
+}
+
+/* ====== CHIPS + PILLS ====== */
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.chip {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.9);
+  border-radius: 999px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.chip:hover {
+  background: rgba(255, 255, 255, 0.10);
+}
+
+.chip-active {
+  border-color: rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.18);
+  font-weight: 600;
+}
+
+.chip-clear {
+  opacity: 0.85;
+}
+
+/* Per-chip accent colors when active */
+.chip-active.chip-any {
+  border-color: rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, 0.20);
+}
+
+.chip-active.chip-latlng {
+  border-color: rgba(80, 140, 255, 0.65);
+  background: rgba(80, 140, 255, 0.22);
+}
+
+.chip-active.chip-notes {
+  border-color: rgba(240, 190, 60, 0.70);
+  background: rgba(240, 190, 60, 0.22);
+}
+
+.chip-active.chip-photo {
+  border-color: rgba(220, 90, 160, 0.70);
+  background: rgba(220, 90, 160, 0.22);
+}
+
+.chip-active.chip-meterSize {
+  border-color: rgba(60, 200, 140, 0.70);
+  background: rgba(60, 200, 140, 0.22);
+}
+
+.pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.pill {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.92);
+  border-radius: 999px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.pill:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.pill-x {
+  opacity: 0.8;
+  margin-left: 6px;
+}
+
 .pill-static {
   cursor: default;
   pointer-events: none;
   opacity: 0.9;
+}
+
+/* ====== ASSIGNMENT TOOLBAR ====== */
+
+.table-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+
+  padding: 12px 12px;
+  margin-bottom: 12px;
+
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 14px;
+}
+
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.toolbar-group .input {
+  height: 36px;
+}
+
+.toolbar-group .btn {
+  height: 36px;
+  padding: 0 14px;
+}
+
+.table-toolbar select.input {
+  min-width: 320px;
+}
+
+@media (max-width: 900px) {
+  .table-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .table-toolbar select.input {
+    width: 100%;
+    min-width: 0;
+  }
+  .toolbar-group {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
+
+/* ====== META ROW ====== */
+
+.meters-meta {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  font-size: 12px;
+}
+
+.meters-meta code {
+  font-size: 12px;
+}
+
+/* ====== TABLE WRAP + TABLE CORE (supports resizable/reorder/hide/pin) ====== */
+
+.table-wrap {
+  overflow: auto;
+  max-height: 70vh; /* keeps big datasets usable */
+  position: relative;
+}
+
+/* CRITICAL for dynamic column widths:
+   - table is wider than container when columns expand
+   - horizontal scroll works
+*/
+.meters-table {
+  table-layout: fixed;
+  width: max-content;
+  min-width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+/* Base cell behavior: ellipsis */
+.meters-table th,
+.meters-table td {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: top;
+}
+
+/* Sticky header */
+.meters-table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: rgba(10, 18, 35, 0.95);
+  backdrop-filter: blur(6px);
+}
+
+/* Zebra rows */
+.meters-table tr:nth-child(even) td {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+/* Row states */
+.row-recent td {
+  background: rgba(30, 140, 90, 0.18) !important;
+}
+
+.row-selected td {
+  background: rgba(80, 140, 255, 0.12) !important;
+}
+
+/* Allow wrap only where you explicitly want it */
+.meters-table td.cell-wrap {
+  white-space: normal;
+  word-break: break-word;
+  overflow: visible;
+  text-overflow: initial;
+}
+
+.meters-table td.assigned-wrap {
+  white-space: normal;
+  word-break: break-word;
+  max-width: 260px;
+}
+
+/* Link polish */
+.meters-table td a {
+  text-decoration: underline;
+  font-weight: 600;
+}
+
+/* ====== HEADER UX: sort button + filter icon ====== */
+
+.th-sort-btn:hover {
+  text-decoration: underline;
+}
+
+/* Header filter icon appears on hover/focus */
+.meters-table th .th-filter-btn {
+  opacity: 0;
+  transform: translateY(-1px);
+  transition: opacity 120ms ease, transform 120ms ease, background 120ms ease;
+}
+
+.meters-table th:hover .th-filter-btn,
+.meters-table th:focus-within .th-filter-btn {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Optional: emphasize active filtered columns slightly */
+.meters-table th.is-filtered {
+  background: rgba(78, 161, 255, 0.08);
+}
+
+/* Popover card */
+.th-filter-pop {
+  border-radius: 14px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+}
+
+/* Inputs/buttons inside popover */
+.th-filter-pop .input {
+  height: 38px;
+  border-radius: 12px;
+}
+
+.th-filter-pop .btn {
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 12px;
+}
+/* src/pages/MetersPage.css */
+
+/* ====== FILTER PANEL / TOOLBAR LOOK ====== */
+
+.meters-filter-panel {
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(10, 18, 35, 0.65);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.25);
+}
+
+.filters {
+  padding: 0;
+  overflow: hidden;
+}
+
+.filters-summary {
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+}
+
+.filters-summary::-webkit-details-marker {
+  display: none;
+}
+
+.filters-summary-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.filters-title {
+  font-weight: 800;
+  font-size: 16px;
+  white-space: nowrap;
+}
+
+.filters-chips {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  flex-wrap: wrap;
 }
 
 .filters-summary-right {
@@ -661,29 +454,290 @@ details[open] .filters-caret {
 
 .filters-body {
   padding: 0 16px 16px 16px;
-  border-top: 1px solid rgba(255,255,255,0.08);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 /* Optional: when collapsed, tighten the card */
 details.filters:not([open]) .filters-body {
   display: none;
 }
+
+/* Field rhythm */
+.meters-filter-panel .field {
+  display: grid;
+  grid-template-rows: auto auto auto;
+  gap: 6px;
+}
+
+.meters-filter-panel .field-label {
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  opacity: 0.9;
+}
+
+.meters-filter-panel .field-hint {
+  min-height: 14px;
+  line-height: 14px;
+  font-size: 11px;
+  opacity: 0.75;
+}
+
+.meters-filter-panel .input {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  height: 40px;
+  border-radius: 12px;
+}
+
+.meters-filter-panel .input:focus {
+  outline: none;
+  border-color: rgba(80, 140, 255, 0.55);
+  box-shadow: 0 0 0 3px rgba(80, 140, 255, 0.18);
+}
+
+@media (max-width: 900px) {
+  .meters-filter-panel .field-hint {
+    display: none;
+  }
+}
+
+/* ====== CHIPS + PILLS ====== */
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.chip {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.9);
+  border-radius: 999px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.chip:hover {
+  background: rgba(255, 255, 255, 0.10);
+}
+
+.chip-active {
+  border-color: rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.18);
+  font-weight: 600;
+}
+
+.chip-clear {
+  opacity: 0.85;
+}
+
+/* Per-chip accent colors when active */
+.chip-active.chip-any {
+  border-color: rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, 0.20);
+}
+
+.chip-active.chip-latlng {
+  border-color: rgba(80, 140, 255, 0.65);
+  background: rgba(80, 140, 255, 0.22);
+}
+
+.chip-active.chip-notes {
+  border-color: rgba(240, 190, 60, 0.70);
+  background: rgba(240, 190, 60, 0.22);
+}
+
+.chip-active.chip-photo {
+  border-color: rgba(220, 90, 160, 0.70);
+  background: rgba(220, 90, 160, 0.22);
+}
+
+.chip-active.chip-meterSize {
+  border-color: rgba(60, 200, 140, 0.70);
+  background: rgba(60, 200, 140, 0.22);
+}
+
+.pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.pill {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.92);
+  border-radius: 999px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.pill:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.pill-x {
+  opacity: 0.8;
+  margin-left: 6px;
+}
+
+.pill-static {
+  cursor: default;
+  pointer-events: none;
+  opacity: 0.9;
+}
+
+/* ====== ASSIGNMENT TOOLBAR ====== */
+
+.table-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+
+  padding: 12px 12px;
+  margin-bottom: 12px;
+
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 14px;
+}
+
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.toolbar-group .input {
+  height: 36px;
+}
+
+.toolbar-group .btn {
+  height: 36px;
+  padding: 0 14px;
+}
+
+.table-toolbar select.input {
+  min-width: 320px;
+}
+
+@media (max-width: 900px) {
+  .table-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .table-toolbar select.input {
+    width: 100%;
+    min-width: 0;
+  }
+  .toolbar-group {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
+
+/* ====== META ROW ====== */
+
+.meters-meta {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  font-size: 12px;
+}
+
+.meters-meta code {
+  font-size: 12px;
+}
+
+/* ====== TABLE WRAP + TABLE CORE (supports resizable/reorder/hide/pin) ====== */
+
+.table-wrap {
+  overflow: auto;
+  max-height: 70vh; /* keeps big datasets usable */
+  position: relative;
+}
+
+/* CRITICAL for dynamic column widths:
+   - table is wider than container when columns expand
+   - horizontal scroll works
+*/
+.meters-table {
+  table-layout: fixed;
+  width: max-content;
+  min-width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+/* Base cell behavior: ellipsis */
+.meters-table th,
+.meters-table td {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: top;
+}
+
+/* Sticky header */
+.meters-table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: rgba(10, 18, 35, 0.95);
+  backdrop-filter: blur(6px);
+}
+
+/* Zebra rows */
+.meters-table tr:nth-child(even) td {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+/* Row states */
+.row-recent td {
+  background: rgba(30, 140, 90, 0.18) !important;
+}
+
+.row-selected td {
+  background: rgba(80, 140, 255, 0.12) !important;
+}
+
+/* Allow wrap only where you explicitly want it */
+.meters-table td.cell-wrap {
+  white-space: normal;
+  word-break: break-word;
+  overflow: visible;
+  text-overflow: initial;
+}
+
 .meters-table td.assigned-wrap {
   white-space: normal;
   word-break: break-word;
   max-width: 260px;
 }
-/* ===== Column header filter UI (⌕ popovers) ===== */
 
-/* Keep header content aligned and clickable without layout shift */
-.meters-table th .th-head {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
+/* Link polish */
+.meters-table td a {
+  text-decoration: underline;
+  font-weight: 600;
 }
 
-/* Only show filter icon on hover or when the popover is open (via :focus-within) */
+/* ====== HEADER UX: sort button + filter icon ====== */
+
+.th-sort-btn:hover {
+  text-decoration: underline;
+}
+
+/* Header filter icon appears on hover/focus */
 .meters-table th .th-filter-btn {
   opacity: 0;
   transform: translateY(-1px);
@@ -696,50 +750,81 @@ details.filters:not([open]) .filters-body {
   transform: translateY(0);
 }
 
-/* Make sure header has room for icon without wrapping weird */
-.meters-table th {
-  white-space: nowrap;
-}
-
-/* Popover card: tighten and make it feel like the rest of the UI */
-.th-filter-pop {
-  border-radius: 14px;
-  box-shadow: 0 18px 40px rgba(0,0,0,0.35);
-  z-index: 99999;
-}
-
-/* Inputs inside popover */
-.th-filter-pop .input {
-  height: 38px;
-  border-radius: 12px;
-}
-
-/* Buttons inside popover */
-.th-filter-pop .btn {
-  height: 34px;
-  padding: 0 12px;
-  border-radius: 12px;
-}
-
-/* Prevent popover from being clipped by table-wrap on some browsers */
-.table-wrap {
-  overflow: auto; /* keep */
-  position: relative;
-}
-
-/* Make sure popover floats above sticky header + rows */
-.th-filter-pop {
-  z-index: 60;
-}
-
 /* Optional: emphasize active filtered columns slightly */
 .meters-table th.is-filtered {
   background: rgba(78, 161, 255, 0.08);
 }
 
-/* Optional: little divider inside popover sections if you add them later */
-.th-filter-pop .divider {
-  height: 1px;
-  background: rgba(255,255,255,0.10);
-  margin: 10px 0;
+/* Popover card */
+.th-filter-pop {
+  border-radius: 14px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+}
+
+/* Inputs/buttons inside popover */
+.th-filter-pop .input {
+  height: 38px;
+  border-radius: 12px;
+}
+
+.th-filter-pop .btn {
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 12px;
+}
+/* ===== Column resize affordance (visual + bigger hit area) ===== */
+
+/* Make header cells a positioning context for the resize handle */
+.meters-table th {
+  position: sticky; /* you already have this */
+  top: 0;
+}
+
+/* The resize handle is the last 10px of the header (we create it in JSX inline).
+   Add a visible divider line and hover feedback.
+*/
+.meters-table th .col-resize-affordance {
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 10px;
+  height: 100%;
+  cursor: col-resize;
+
+  /* faint divider line */
+  background: linear-gradient(
+    to right,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.06) 45%,
+    rgba(255, 255, 255, 0.16) 50%,
+    rgba(255, 255, 255, 0.06) 55%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  opacity: 0.55;
+  transition: opacity 120ms ease, background 120ms ease;
+}
+
+.meters-table th:hover .col-resize-affordance {
+  opacity: 1;
+  background: linear-gradient(
+    to right,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(120, 170, 255, 0.10) 45%,
+    rgba(120, 170, 255, 0.45) 50%,
+    rgba(120, 170, 255, 0.10) 55%,
+    rgba(255, 255, 255, 0) 100%
+  );
+}
+
+/*shows a stronger divider when actively dragging (JS can toggle this class) */
+.meters-table th.resizing .col-resize-affordance {
+  opacity: 1;
+  background: linear-gradient(
+    to right,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(120, 170, 255, 0.18) 45%,
+    rgba(120, 170, 255, 0.70) 50%,
+    rgba(120, 170, 255, 0.18) 55%,
+    rgba(255, 255, 255, 0) 100%
+  );
 }

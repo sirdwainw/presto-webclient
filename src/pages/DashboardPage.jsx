@@ -8,29 +8,26 @@ import {
   techWorkloadApi,
   techSummaryApi,
 } from "../api/reports.api";
-import { getEntityId } from "../api/apiClient";
 
 function KpiTile({ label, value, hint, to }) {
   const inner = (
-    <div
-      className="card card-subtle"
-      style={{ cursor: to ? "pointer" : "default" }}
-    >
-      <div className="muted" style={{ fontSize: 12 }}>
-        {label}
-      </div>
-      <div className="h2" style={{ marginTop: 4 }}>
-        {value}
-      </div>
+    <div className="card card-subtle kpi-card">
+      <div className="kpi-label">{label}</div>
+      <div className="kpi-value">{value}</div>
       {hint ? (
-        <div className="muted" style={{ marginTop: 6 }}>
-          {hint}
-        </div>
-      ) : null}
+        <div className="kpi-hint">{hint}</div>
+      ) : (
+        <div className="kpi-hint" />
+      )}
     </div>
   );
+
   return to ? (
-    <Link to={to} style={{ textDecoration: "none", color: "inherit" }}>
+    <Link
+      to={to}
+      className="kpi-link"
+      style={{ textDecoration: "none", color: "inherit" }}
+    >
       {inner}
     </Link>
   ) : (
@@ -206,8 +203,7 @@ export function DashboardPage() {
         ) : (
           <div className="card">
             <div className="h1">Dashboard</div>
-            <div className="muted">Tech HUD</div>
-          </div>
+                     </div>
         )}
 
         <ErrorBanner error={techError} onDismiss={() => setTechError(null)} />
@@ -217,7 +213,7 @@ export function DashboardPage() {
 
         {!loadingTech && techSummary ? (
           <>
-            <div className="grid grid-4">
+            <div className="grid grid-4 kpi-grid">
               <KpiTile
                 label="My assigned meters"
                 value={techSummary.assignedMetersCount}
@@ -240,75 +236,18 @@ export function DashboardPage() {
                 label="Today's progress"
                 value={techSummary.updatedTodayCount}
                 hint="Unique meters updated today"
-                to="/tech/updates?status=all"
+                to="/tech/updates?date=today"
               />
             </div>
-            <div className="card">
-              <div className="h2">Recent updates</div>
-              <div className="muted">Last 10 updates (most recent first)</div>
 
-              <div className="table-wrap" style={{ marginTop: 12 }}>
-                <table className="table">
-                  <thead>
-                    <tr>
-                      <th>Update</th>
-                      <th>Meter</th>
-                      <th>Status</th>
-                      <th>Created</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(techSummary.recentUpdates || []).map((u, idx) => {
-                      const updateId = getEntityId(u);
-                      const meterId =
-                        typeof u?.meterId === "string"
-                          ? u.meterId
-                          : getEntityId(u?.meterId) || "";
-
-                      return (
-                        <tr key={updateId || idx}>
-                          <td>
-                            {updateId ? (
-                              <Link
-                                to={`/updates/${encodeURIComponent(updateId)}`}
-                              >
-                                Details
-                              </Link>
-                            ) : (
-                              "—"
-                            )}
-                          </td>
-                          <td>
-                            {meterId ? (
-                              <Link
-                                to={`/meters/${encodeURIComponent(meterId)}`}
-                              >
-                                Meter
-                              </Link>
-                            ) : (
-                              "—"
-                            )}
-                          </td>
-                          <td>{String(u?.status || "")}</td>
-                          <td>
-                            {u?.createdAt
-                              ? new Date(u.createdAt).toLocaleString()
-                              : "—"}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+            {!isSuperadmin ? (
+              <div className="muted" style={{ marginTop: 10 }}>
+                Tip: start with{" "}
+                <Link to="/tech/assignments">My Assignments</Link>. Use{" "}
+                <Link to="/tech/updates">My Updates</Link> to fix rejects or
+                track review status.
               </div>
-
-              {!isSuperadmin ? (
-                <div className="muted" style={{ marginTop: 10 }}>
-                  Tip: use <Link to="/tech/updates">My Updates</Link> to filter
-                  by status.
-                </div>
-              ) : null}
-            </div>
+            ) : null}
           </>
         ) : null}
       </div>
@@ -334,7 +273,7 @@ export function DashboardPage() {
             <div>
               <div className="h1">Dashboard</div>
               <div className="muted">
-                {isSuperadmin ? "Superadmin" : "Admin"} view 
+                {isSuperadmin ? "Superadmin" : "Admin"} view{" "}
               </div>
             </div>
 
