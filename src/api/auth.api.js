@@ -1,12 +1,11 @@
 import { apiFetch, setToken, clearToken } from "./apiClient";
 
-export function registerApi(body) {
+export function registerApi(payload) {
   return apiFetch("/api/auth/register", {
     method: "POST",
-    body: JSON.stringify(body),
+    body: JSON.stringify(payload),
   });
 }
-
 export async function loginApi(body) {
   // 1) Login gets the JWT
   const login = await apiFetch("/api/auth/login", {

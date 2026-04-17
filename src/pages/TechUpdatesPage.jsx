@@ -6,9 +6,9 @@ import { ErrorBanner } from "../components/ErrorBanner";
 import { LoadingBlock } from "../components/LoadingBlock";
 import { SuccessBanner } from "../components/SuccessBanner";
 import { Pagination } from "../components/Pagination";
-import { JsonView } from "../components/JsonView";
 import { getEntityId } from "../api/apiClient";
 import { MeterLabel } from "../components/MeterLabel";
+import { StatusBadge } from "../components/StatusBadge";
 
 function fmt(dt) {
   if (!dt) return "";
@@ -23,6 +23,32 @@ function getMeterIdFromUpdate(u) {
 
   if (typeof u?.meterId === "string") return u.meterId;
   return getEntityId(u?.meterId) || "";
+}
+
+function prettyFields(fieldsChanged) {
+  const list = Array.isArray(fieldsChanged)
+    ? fieldsChanged.filter(Boolean)
+    : [];
+
+  if (!list.length) return "";
+
+  const map = {
+    latlng: "GPS",
+    locationNotes: "Notes",
+    meterSize: "Meter Size",
+    photoUrl: "Photo",
+  };
+
+  return list.map((x) => map[x] || x).join(", ");
+}
+
+
+
+function isGpsCaptured(u) {
+  return (
+    u?.gpsCaptured === true ||
+    (typeof u?.latitude === "number" && typeof u?.longitude === "number")
+  );
 }
 
 export function TechUpdatesPage() {
@@ -44,7 +70,8 @@ export function TechUpdatesPage() {
   const [busyId, setBusyId] = useState("");
   const [actionError, setActionError] = useState(null);
   const [success, setSuccess] = useState("");
-  const dateParam = searchParams.get("date") || ""; // "today" or ""
+
+  const dateParam = searchParams.get("date") || "";
   const updates = useMemo(() => payload?.updates || [], [payload]);
 
   function patchParams(next) {
@@ -113,9 +140,10 @@ export function TechUpdatesPage() {
               </span>
             ) : null}
             <div className="muted">
-              Your submitted / approved / rejected updates.
+              Your submitted, approved, and rejected updates.
             </div>
           </div>
+
           <Link className="btn" to="/dashboard">
             Dashboard
           </Link>
@@ -137,6 +165,7 @@ export function TechUpdatesPage() {
               {label}
             </button>
           ))}
+
           <button
             className={`chip ${dateParam === "today" ? "active" : ""}`}
             onClick={() =>
@@ -214,15 +243,37 @@ export function TechUpdatesPage() {
               const meterId = getMeterIdFromUpdate(u);
               const meter = u?.meter || null;
 
-              const title = `${String(u?.status || "update")} • ${fmt(u?.createdAt)}`;
+              const status = String(u?.status || "update");
+              const createdAt = fmt(u?.createdAt);
+              const fields = prettyFields(u?.fieldsChanged);
+              const gpsCaptured = isGpsCaptured(u);
+
+              const notesPreview = String(u?.locationNotes || "").trim();
+              const meterSize = String(u?.meterSize || "").trim();
+              const hasPhoto = Boolean(String(u?.photoUrl || "").trim());
+              const reviewNotes = String(u?.reviewNotes || "").trim();
 
               return (
                 <div className="card card-subtle" key={updateId || idx}>
-                  <div className="row space-between">
-                    <div>
-                      <div className="h3">{title}</div>
+                  <div
+                    className="row space-between"
+                    style={{ alignItems: "flex-start" }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div
+                        className="row"
+                        style={{
+                          gap: 10,
+                          alignItems: "center",
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <StatusBadge status={status} />
 
-                      <div style={{ marginTop: 8 }}>
+                        <span className="muted">{createdAt}</span>
+                      </div>
+
+                      <div style={{ marginTop: 10 }}>
                         <MeterLabel
                           meter={meter}
                           meterId={meterId}
@@ -235,17 +286,46 @@ export function TechUpdatesPage() {
                         />
                       </div>
 
-                      {updateId ? (
-                        <div
-                          className="muted"
-                          style={{ marginTop: 6, fontSize: 12 }}
-                        >
-                          System Update ID: <code>{updateId}</code>
+                      <div
+                        className="grid grid-2"
+                        style={{ marginTop: 12, gap: 12 }}
+                      >
+                        <div className="muted">
+                          <strong>Changed:</strong> {fields || "—"}
+                        </div>
+
+                        <div className="muted">
+                          <strong>GPS:</strong>{" "}
+                          {gpsCaptured ? "Captured" : "No GPS"}
+                        </div>
+
+                        <div className="muted">
+                          <strong>Meter Size:</strong> {meterSize || "—"}
+                        </div>
+
+                        <div className="muted">
+                          <strong>Photo:</strong>{" "}
+                          {hasPhoto ? "Attached" : "None"}
+                        </div>
+                      </div>
+
+                      {notesPreview ? (
+                        <div className="muted" style={{ marginTop: 10 }}>
+                          <strong>Notes:</strong> {notesPreview}
+                        </div>
+                      ) : null}
+
+                      {reviewNotes ? (
+                        <div className="muted" style={{ marginTop: 10 }}>
+                          <strong>Reviewer note:</strong> {reviewNotes}
                         </div>
                       ) : null}
                     </div>
 
-                    <div className="row" style={{ alignItems: "flex-start" }}>
+                    <div
+                      className="row"
+                      style={{ alignItems: "flex-start", gap: 8 }}
+                    >
                       {updateId ? (
                         <Link
                           className="btn"
@@ -278,11 +358,6 @@ export function TechUpdatesPage() {
                       </button>
                     </div>
                   </div>
-
-                  <details style={{ marginTop: 10 }}>
-                    <summary className="muted">Show raw JSON (debug)</summary>
-                    <JsonView data={u} />
-                  </details>
                 </div>
               );
             })}

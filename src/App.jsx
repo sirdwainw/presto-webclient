@@ -46,9 +46,9 @@ export default function App() {
           />
 
           <Route element={<RequireRole roles={["admin", "superadmin"]} />}>
-            <Route path="/assignments" element={<AdminAssignmentsPage />} />
+         
             <Route path="/review/updates" element={<ReviewUpdatesPage />} />
-            <Route path="/reports" element={<ReportsPage />} />
+           
           </Route>
 
           <Route element={<RequireRole roles={["tech"]} />}>

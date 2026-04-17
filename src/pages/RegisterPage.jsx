@@ -11,9 +11,7 @@ export function RegisterPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-
-  // Contract: role? companyId?
-  const [role, setRole] = useState("");
+  const [role, setRole] = useState("tech");
   const [companyId, setCompanyId] = useState("");
 
   const [loading, setLoading] = useState(false);
@@ -23,10 +21,16 @@ export function RegisterPage() {
     e.preventDefault();
     setError(null);
     setLoading(true);
+
     try {
-      const body = { name, email, password };
+      const body = {
+        name: name.trim(),
+        email: email.trim(),
+        password,
+      };
+
       if (role) body.role = role;
-      if (companyId) body.companyId = companyId;
+      if (companyId.trim()) body.companyId = companyId.trim();
 
       await register(body);
       nav("/dashboard", { replace: true });
@@ -79,7 +83,7 @@ export function RegisterPage() {
           </FormField>
 
           <FormField
-            label="Role "
+            label="Role"
             hint="Allowed roles per contract: tech, admin, superadmin"
           >
             <select
@@ -88,17 +92,13 @@ export function RegisterPage() {
               onChange={(e) => setRole(e.target.value)}
               disabled={loading}
             >
-              
               <option value="tech">tech</option>
               <option value="admin">admin</option>
               <option value="superadmin">superadmin</option>
             </select>
           </FormField>
 
-          <FormField
-            label="Company ID (optional)"
-            hint="You can set later"
-          >
+          <FormField label="Company ID (optional)" hint="You can set later">
             <input
               className="input"
               value={companyId}

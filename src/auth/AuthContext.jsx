@@ -5,21 +5,20 @@ import React, {
   useMemo,
   useState,
 } from "react";
-import { loginApi, meApi } from "../api/auth.api";
+import { loginApi, meApi, registerApi } from "../api/auth.api";
 import { clearToken, getToken, setToken } from "../api/apiClient";
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [booting, setBooting] = useState(true); // new name
-  const [loading, setLoading] = useState(false); // action-level loading (login, etc.)
+  const [booting, setBooting] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
   async function refreshMe({ silent = false } = {}) {
     const token = getToken();
 
-    // No token => not signed in; don't call /me
     if (!token) {
       setUser(null);
       if (!silent) setError(null);
@@ -27,12 +26,11 @@ export function AuthProvider({ children }) {
     }
 
     try {
-      const res = await meApi(); // { user: {...} }
+      const res = await meApi();
       setUser(res?.user ?? null);
       if (!silent) setError(null);
       return res?.user ?? null;
     } catch (err) {
-      // apiFetch throws plain object: { status, error, raw }
       if (err?.status === 401) {
         clearToken();
         setUser(null);
@@ -49,22 +47,37 @@ export function AuthProvider({ children }) {
     setLoading(true);
     setError(null);
 
-    // Support BOTH call styles:
-    // login({ email, password })  ✅ preferred
-    // login(email, password)      ✅ backwards compatible
     const body =
       typeof emailOrObj === "object" && emailOrObj !== null
         ? emailOrObj
         : { email: emailOrObj, password: maybePassword };
 
     try {
-      const res = await loginApi(body); // { token, user } (and loginApi sets token too if you implemented it)
-      if (res?.token) setToken(res.token); // harmless if already set inside loginApi
+      const res = await loginApi(body);
+      if (res?.token) setToken(res.token);
       setUser(res?.user ?? null);
       return res;
     } catch (err) {
       setUser(null);
       setError(err?.error || "Login failed");
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function register(payload) {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const res = await registerApi(payload);
+      if (res?.token) setToken(res.token);
+      setUser(res?.user ?? null);
+      return res;
+    } catch (err) {
+      setUser(null);
+      setError(err?.error || "Registration failed");
       throw err;
     } finally {
       setLoading(false);
@@ -77,7 +90,6 @@ export function AuthProvider({ children }) {
     setError(null);
   }
 
-  // Boot init: only call /me if token exists; silent to avoid console noise
   useEffect(() => {
     let alive = true;
 
@@ -93,10 +105,8 @@ export function AuthProvider({ children }) {
     return () => {
       alive = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Global 401 listener from apiFetch
   useEffect(() => {
     function onUnauthorized() {
       clearToken();
@@ -113,7 +123,6 @@ export function AuthProvider({ children }) {
 
   const value = useMemo(
     () => ({
-      // canonical
       user,
       role: user?.role || null,
       isAuthenticated,
@@ -121,12 +130,11 @@ export function AuthProvider({ children }) {
       loading,
       error,
 
-      // backwards-compatible aliases (so ProtectedRoute/RequireRole don’t break)
       isAuthed: isAuthenticated,
       isInitializing: booting,
 
-      // actions
       login,
+      register,
       logout,
       refreshMe,
       setUser,

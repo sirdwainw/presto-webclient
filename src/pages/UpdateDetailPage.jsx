@@ -7,6 +7,8 @@ import { SuccessBanner } from "../components/SuccessBanner";
 import { useAuth } from "../auth/AuthContext";
 import { getEntityId } from "../api/apiClient";
 import { MeterLabel } from "../components/MeterLabel";
+import { StatusBadge } from "../components/StatusBadge";
+
 
 function fmt(dt) {
   if (!dt) return "";
@@ -27,30 +29,55 @@ function safe(v) {
 }
 
 function createdByDisplay(update) {
-  // If backend enriched createdBy
   const cb = update?.createdBy;
   if (cb?.name && cb?.email) return `${cb.name} (${cb.email})`;
   if (cb?.name) return cb.name;
   if (cb?.email) return cb.email;
 
-  // Fallback
-  if (typeof update?.createdByUserId === "string")
+  if (typeof update?.createdByUserId === "string") {
     return update.createdByUserId;
+  }
+
   return getEntityId(update?.createdByUserId) || "(unknown)";
 }
 
 function getMeterIdFromUpdate(update) {
-  // Prefer populated meter object
   const midFromMeter = getEntityId(update?.meter);
   if (midFromMeter) return midFromMeter;
 
-  // Fallback to meterId field
   if (typeof update?.meterId === "string") return update.meterId;
   return getEntityId(update?.meterId) || "";
 }
 
+function prettyFields(fieldsChanged) {
+  const list = Array.isArray(fieldsChanged)
+    ? fieldsChanged.filter(Boolean)
+    : [];
+
+  if (!list.length) return "";
+
+  const map = {
+    latlng: "GPS",
+    locationNotes: "Notes",
+    meterSize: "Meter Size",
+    photoUrl: "Photo",
+  };
+
+  return list.map((x) => map[x] || x).join(", ");
+}
+
+function isGpsCaptured(update) {
+  return (
+    update?.gpsCaptured === true ||
+    (typeof update?.latitude === "number" &&
+      typeof update?.longitude === "number")
+  );
+}
+
+
+
 export function UpdateDetailPage() {
-  const { id } = useParams(); // update id
+  const { id } = useParams();
   const nav = useNavigate();
   const { user } = useAuth();
   const role = user?.role;
@@ -76,13 +103,37 @@ export function UpdateDetailPage() {
     return typeof s === "string" ? s : "(unknown)";
   }, [update]);
 
+  const fieldsChanged = useMemo(
+    () => prettyFields(update?.fieldsChanged),
+    [update],
+  );
+
+  const gpsCaptured = useMemo(() => isGpsCaptured(update), [update]);
+
+  const meterSize = useMemo(
+    () => String(update?.meterSize || "").trim(),
+    [update],
+  );
+
+  const notes = useMemo(
+    () => String(update?.locationNotes || "").trim(),
+    [update],
+  );
+
+  const photoUrl = useMemo(
+    () => String(update?.photoUrl || "").trim(),
+    [update],
+  );
+
+  const reviewNotes = useMemo(
+    () => String(update?.reviewNotes || "").trim(),
+    [update],
+  );
+
   const canDelete = useMemo(() => {
     if (!update) return false;
 
-    // Admin/superadmin can delete any update
     if (role === "admin" || role === "superadmin") return true;
-
-    // Tech can delete only submitted updates (as before)
     if (role === "tech") return status === "submitted";
     return false;
   }, [role, status, update]);
@@ -114,10 +165,13 @@ export function UpdateDetailPage() {
       await deleteUpdateApi(updateId);
       setSuccess("Update deleted.");
 
-      // Navigate somewhere sensible after delete
-      if (role === "admin" || role === "superadmin") nav("/review/updates");
-      else if (meterId) nav(`/meters/${encodeURIComponent(meterId)}/updates`);
-      else nav("/dashboard");
+      if (role === "admin" || role === "superadmin") {
+        nav("/review/updates");
+      } else if (meterId) {
+        nav(`/meters/${encodeURIComponent(meterId)}/updates`);
+      } else {
+        nav("/dashboard");
+      }
     } catch (e) {
       setDeleteError(e);
     } finally {
@@ -125,7 +179,6 @@ export function UpdateDetailPage() {
     }
   }
 
-  // Internal fields shown ONLY to superadmin
   const internalFields = useMemo(() => {
     if (!update) return [];
 
@@ -137,21 +190,22 @@ export function UpdateDetailPage() {
         value: safe(getEntityId(update?.meter) || update?.meterId),
       },
       { label: "Created By (raw)", value: safe(update?.createdByUserId) },
+      { label: "Reviewed By (raw)", value: safe(update?.reviewedByUserId) },
     ].filter((f) => f.value !== "");
   }, [update, updateId]);
 
   return (
     <div className="stack">
       <div className="card">
-        <div className="row space-between">
+        <div className="row space-between" style={{ alignItems: "flex-start" }}>
           <div>
             <div className="h1">Update Details</div>
             <div className="muted">
-              Clean summary. Internal fields only appear for superadmin.
+              Review the submitted update and its current status.
             </div>
           </div>
 
-          <div className="row">
+          <div className="row" style={{ gap: 8 }}>
             <button className="btn" onClick={() => nav(-1)}>
               Back
             </button>
@@ -186,44 +240,96 @@ export function UpdateDetailPage() {
       {!loading && update ? (
         <>
           <div className="card">
-            <div className="h2">Summary</div>
+            <div
+              className="row"
+              style={{ gap: 10, alignItems: "center", flexWrap: "wrap" }}
+            >
+              <StatusBadge status={status} />
 
-            <div className="grid grid-2" style={{ marginTop: 12 }}>
-              <div>
-                <div className="muted">Status</div>
-                <div>{status}</div>
+              <span className="muted">{fmt(update?.createdAt)}</span>
+            </div>
+
+            <div style={{ marginTop: 14 }}>
+              <div className="muted">Meter</div>
+              {meterId || meter ? (
+                <MeterLabel
+                  meter={meter}
+                  meterId={meterId}
+                  to={
+                    meterId
+                      ? `/meters/${encodeURIComponent(meterId)}`
+                      : undefined
+                  }
+                  showSystemId={false}
+                />
+              ) : (
+                <span className="muted">(none)</span>
+              )}
+            </div>
+
+            <div className="grid grid-2" style={{ marginTop: 16, gap: 12 }}>
+              <div className="muted">
+                <strong>Submitted By:</strong> {createdByDisplay(update)}
               </div>
 
-              <div>
-                <div className="muted">Created At</div>
-                <div>{fmt(update?.createdAt)}</div>
+              <div className="muted">
+                <strong>Changed:</strong> {fieldsChanged || "—"}
               </div>
 
-              <div>
-                <div className="muted">Submitted By</div>
-                <div>{createdByDisplay(update)}</div>
+              <div className="muted">
+                <strong>GPS:</strong> {gpsCaptured ? "Captured" : "No GPS"}
               </div>
 
-              <div>
-                <div className="muted">Meter</div>
-                {meterId || meter ? (
-                  <MeterLabel
-                    meter={meter}
-                    meterId={meterId}
-                    to={
-                      meterId
-                        ? `/meters/${encodeURIComponent(meterId)}`
-                        : undefined
-                    }
-                    showSystemId={false}
-                  />
-                ) : (
-                  <span className="muted">(none)</span>
-                )}
+              <div className="muted">
+                <strong>Meter Size:</strong> {meterSize || "—"}
+              </div>
+
+              <div className="muted">
+                <strong>Photo:</strong> {photoUrl ? "Attached" : "None"}
+              </div>
+
+              <div className="muted">
+                <strong>Reviewed:</strong> {fmt(update?.reviewedAt) || "—"}
               </div>
             </div>
 
-            <div className="row" style={{ marginTop: 12 }}>
+            {notes ? (
+              <div style={{ marginTop: 14 }}>
+                <div className="muted">
+                  <strong>Notes</strong>
+                </div>
+                <div style={{ marginTop: 4 }}>{notes}</div>
+              </div>
+            ) : null}
+
+            {reviewNotes ? (
+              <div style={{ marginTop: 14 }}>
+                <div className="muted">
+                  <strong>Reviewer Note</strong>
+                </div>
+                <div style={{ marginTop: 4 }}>{reviewNotes}</div>
+              </div>
+            ) : null}
+
+            {photoUrl ? (
+              <div style={{ marginTop: 14 }}>
+                <div className="muted">
+                  <strong>Photo URL</strong>
+                </div>
+                <div style={{ marginTop: 4, wordBreak: "break-all" }}>
+                  <a
+                    href={photoUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="link"
+                  >
+                    {photoUrl}
+                  </a>
+                </div>
+              </div>
+            ) : null}
+
+            <div className="row" style={{ marginTop: 16, gap: 8 }}>
               <button className="btn" onClick={load} disabled={loading}>
                 Refresh
               </button>
@@ -244,8 +350,9 @@ export function UpdateDetailPage() {
               <summary className="h2" style={{ cursor: "pointer" }}>
                 Debug (internal IDs)
               </summary>
+
               <div className="muted" style={{ marginTop: 6 }}>
-                Collapsed by default to keep the page customer-facing.
+                Collapsed by default to keep the page cleaner.
               </div>
 
               <div className="grid grid-3" style={{ marginTop: 12 }}>

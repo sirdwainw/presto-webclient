@@ -16,7 +16,6 @@ import { MapPickerModal } from "../components/MapPickerModal";
 
 function getCreatedById(update) {
   if (!update || typeof update !== "object") return "";
-  // If backend now returns createdByUserId as populated object, support it:
   if (update.createdByUserId && typeof update.createdByUserId === "object") {
     return getEntityId(update.createdByUserId) || "";
   }
@@ -54,9 +53,9 @@ function fmtSubmittedBy(u) {
   if (email) return email;
   return "—";
 }
+
 function buildMapUrl(lat, lng) {
   if (typeof lat !== "number" || typeof lng !== "number") return "";
-  // Google Maps works great everywhere
   return `https://www.google.com/maps?q=${encodeURIComponent(`${lat},${lng}`)}`;
 }
 
@@ -66,9 +65,11 @@ export function MeterUpdatesPage() {
   const role = user?.role;
   const isSuperadmin = role === "superadmin";
   const myUserId = getEntityId(user) || "";
-  const nav = useNavigate();
 
+  const nav = useNavigate();
   const location = useLocation();
+  const cameFromAssignments = location.state?.from === "tech-assignments";
+
   const debug =
     isSuperadmin && new URLSearchParams(location.search).get("debug") === "1";
 
@@ -334,10 +335,21 @@ export function MeterUpdatesPage() {
             </div>
           </div>
 
-          <div className="row">
+          <div className="row" style={{ gap: 8 }}>
+            {cameFromAssignments ? (
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => nav("/tech/assignments")}
+              >
+                Back to Assignments
+              </button>
+            ) : null}
+
             <Link className="btn" to={`/meters/${encodeURIComponent(meterId)}`}>
               Meter Card
             </Link>
+
             <Link className="btn" to="/meters">
               Meter List
             </Link>
@@ -584,7 +596,6 @@ export function MeterUpdatesPage() {
                     </div>
                   </div>
 
-                  {/* Debug only if superadmin AND ?debug=1 */}
                   {debug ? (
                     <details style={{ marginTop: 10 }}>
                       <summary className="muted">
