@@ -343,15 +343,13 @@ function handleSkipSavedMappings() {
       <div className="import-card page-header">
         <h1>Import Center</h1>
 
-        <div className="import-link-row">
-          <button
-            className="import-btn-ghost"
-            type="button"
-            onClick={openSampleCsvDownload}
-          >
-            Download Sample CSV
-          </button>
-        </div>
+        <a
+  href="/presto-import-sample.csv"
+  download
+  className="import-btn-ghost"
+>
+  Download Sample CSV
+</a>
 
         <p className="import-muted">
           Download the sample CSV to see the expected headers and test the
