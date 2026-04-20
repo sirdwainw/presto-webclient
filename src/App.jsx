@@ -17,6 +17,8 @@ import { ReportsPage } from "./pages/ReportsPage.jsx";
 import { TechAssignmentsPage } from "./pages/TechAssignmentsPage.jsx";
 import { TechUpdatesPage } from "./pages/TechUpdatesPage.jsx";
 import { UpdateDetailPage } from "./pages/UpdateDetailPage.jsx";
+import { ImportCenterPage } from "./pages/ImportCenterPage.jsx";
+import { ImportHistoryDetailPage } from "./pages/ImportHistoryDetailPage.jsx";
 
 import { AdminAssignmentsPage } from "./pages/AdminAssignmentsPage.jsx";
 import { NotFoundPage } from "./pages/NotFoundPage.jsx";
@@ -46,9 +48,12 @@ export default function App() {
           />
 
           <Route element={<RequireRole roles={["admin", "superadmin"]} />}>
-         
             <Route path="/review/updates" element={<ReviewUpdatesPage />} />
-           
+            <Route path="/imports" element={<ImportCenterPage />} />
+            <Route
+              path="/imports/history/:id"
+              element={<ImportHistoryDetailPage />}
+            />
           </Route>
 
           <Route element={<RequireRole roles={["tech"]} />}>

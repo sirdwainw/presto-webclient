@@ -1,4 +1,3 @@
-// src/components/AppLayout.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Link,
@@ -283,8 +282,8 @@ export function AppLayout() {
 
             {role === "admin" || role === "superadmin" ? (
               <>
-              
                 <NavItem to="/review/updates">Review Queue</NavItem>
+                <NavItem to="/imports">Import Center</NavItem>
               </>
             ) : null}
           </nav>

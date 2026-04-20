@@ -1,0 +1,4 @@
+electronicId,accountNumber,meterSerialNumber,customerName,address,route,meterSize,unitType,latitude,longitude,locationNotes,numberOfPictures
+123456789,ACCT-NEW-1001,MSN-1001,New Customer,123 New St,R-01,5/8,Residential,32.7357,-97.1081,Front yard by sidewalk,0
+9626515,0012000610203,MSN-2001,Updated Customer,456 Existing Ave,R-02,1,Commercial,32.7550,-97.3300,Gate code 1234,2
+,,MSN-BAD-3001,Bad Row,789 Missing Id Ln,R-03,5/8,Residential,32.7000,,Missing both identifiers and longitude,1
