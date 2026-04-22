@@ -34,25 +34,31 @@ function FieldRow({ label, value, copyable = false, onCopy }) {
   const show = value !== "" && value !== null && value !== undefined;
 
   return (
-    <div>
+    <div className="card card-subtle">
       <div
         className="muted"
-        style={{ display: "flex", gap: 8, alignItems: "center" }}
+        style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}
       >
         <span>{label}</span>
         {copyable && show ? (
           <button
             type="button"
-            className="btn btn-small"
+            className="btn"
             onClick={() => onCopy?.(String(value))}
             title={`Copy ${label}`}
-            style={{ padding: "4px 8px", fontSize: 12 }}
+            style={{ padding: "4px 8px", fontSize: 12, width: "auto" }}
           >
             Copy
           </button>
         ) : null}
       </div>
-      <div className={label === "System ID" ? "mono" : ""}>
+      <div
+        style={{
+          marginTop: 8,
+          wordBreak: "break-word",
+          whiteSpace: "pre-wrap",
+        }}
+      >
         {show ? value : ""}
       </div>
     </div>
@@ -79,7 +85,7 @@ export function MeterDetailPage() {
       setLoading(true);
       setError(null);
       try {
-        const data = await getMeterApi(id); // { meter }
+        const data = await getMeterApi(id);
         setMeterPayload(data);
       } catch (e) {
         if (isCompanyScopeError(e) && role === "superadmin") {
@@ -101,19 +107,18 @@ export function MeterDetailPage() {
     role === "tech" || role === "admin" || role === "superadmin";
   const isSuperadmin = role === "superadmin";
 
-  // Resolve company name from meter.companyId via /api/companies
   useEffect(() => {
     async function resolveCompanyName() {
       try {
         const cid = meter?.companyId ? String(meter.companyId) : "";
         if (!cid) return;
 
-        const data = await listCompaniesApi(); // { companies: [...] }
+        const data = await listCompaniesApi();
         const companies = data?.companies || [];
 
         const match = companies.find((c) => {
-          const id = getEntityId(c);
-          return id && String(id) === cid;
+          const companyId = getEntityId(c);
+          return companyId && String(companyId) === cid;
         });
 
         if (match) {
@@ -121,7 +126,7 @@ export function MeterDetailPage() {
           setCompanyCode(match?.code ?? "");
         }
       } catch {
-        // non-blocking: if it fails, we just won't show the name/code
+        // non-blocking
       }
     }
 
@@ -137,7 +142,6 @@ export function MeterDetailPage() {
       setCopiedMsg(`${label} copied`);
       window.setTimeout(() => setCopiedMsg(""), 1600);
     } catch {
-      // fallback for older browsers / permission cases
       try {
         const ta = document.createElement("textarea");
         ta.value = value;
@@ -160,21 +164,18 @@ export function MeterDetailPage() {
   const companyDisplay = useMemo(() => {
     if (companyName && companyCode) return `${companyName} (${companyCode})`;
     if (companyName) return companyName;
-    return ""; // hide if unknown
+    return "";
   }, [companyName, companyCode]);
 
-  // Build visible fields (no raw JSON)
   const fields = useMemo(() => {
     if (!meter) return [];
 
     const arr = [];
 
-    // Company name is the friendly display for everyone (not companyId)
     if (companyDisplay) {
       arr.push({ label: "Company", value: companyDisplay, copyable: false });
     }
 
-    // ONLY superadmin sees internal IDs
     if (isSuperadmin) {
       arr.push({ label: "System ID", value: meterId, copyable: true });
       arr.push({
@@ -184,7 +185,6 @@ export function MeterDetailPage() {
       });
     }
 
-    // Core identifiers
     arr.push({
       label: "Electronic ID",
       value: safe(meter.electronicId),
@@ -200,8 +200,6 @@ export function MeterDetailPage() {
       value: safe(meter.meterSerialNumber),
       copyable: false,
     });
-
-    // Customer/location
     arr.push({
       label: "Customer Name",
       value: safe(meter.customerName),
@@ -209,40 +207,20 @@ export function MeterDetailPage() {
     });
     arr.push({ label: "Address", value: safe(meter.address), copyable: true });
     arr.push({ label: "Route", value: safe(meter.route), copyable: false });
-    arr.push({
-      label: "Unit Type",
-      value: safe(meter.unitType),
-      copyable: false,
-    });
-
-    // Field capture / quality
-    arr.push({
-      label: "Latitude",
-      value: safe(meter.latitude),
-      copyable: true,
-    });
-    arr.push({
-      label: "Longitude",
-      value: safe(meter.longitude),
-      copyable: true,
-    });
+    arr.push({ label: "Unit Type", value: safe(meter.unitType), copyable: false });
+    arr.push({ label: "Latitude", value: safe(meter.latitude), copyable: true });
+    arr.push({ label: "Longitude", value: safe(meter.longitude), copyable: true });
     arr.push({
       label: "Location Notes",
       value: safe(meter.locationNotes),
       copyable: false,
     });
-    arr.push({
-      label: "Meter Size",
-      value: safe(meter.meterSize),
-      copyable: false,
-    });
+    arr.push({ label: "Meter Size", value: safe(meter.meterSize), copyable: false });
     arr.push({
       label: "Number of Pictures",
       value: safe(meter.numberOfPictures),
       copyable: false,
     });
-
-    // System fields
     arr.push({ label: "Source", value: safe(meter.source), copyable: false });
     arr.push({
       label: "Last Synced At",
@@ -277,9 +255,7 @@ export function MeterDetailPage() {
             <div className="muted">
               Detailed view for meter{" "}
               {meter ? (
-                <strong>
-                  {meter?.electronicId || meter?.accountNumber || "—"}
-                </strong>
+                <strong>{meter?.electronicId || meter?.accountNumber || "—"}</strong>
               ) : (
                 <strong>{id}</strong>
               )}
@@ -288,7 +264,7 @@ export function MeterDetailPage() {
 
           <div className="row">
             <Link className="btn" to="/meters">
-              Back to meters
+              Back to Meters
             </Link>
 
             {canUpdate ? (
@@ -325,29 +301,9 @@ export function MeterDetailPage() {
         <div className="card">
           <div className="h2">All Details</div>
           <div className="muted" style={{ marginTop: 6 }}>
-            Customer-facing fields only. (Debug IDs available in dropdown for
-            superadmin.)
+            Customer-facing fields are shown below. Internal IDs remain visible
+            to superadmin users.
           </div>
-
-          {isSuperadmin ? (
-            <details style={{ marginTop: 10 }}>
-              <summary className="muted">Debug (internal IDs)</summary>
-              <div className="grid grid-3" style={{ marginTop: 12 }}>
-                <FieldRow
-                  label="System ID"
-                  value={meterId}
-                  copyable={true}
-                  onCopy={(val) => copyToClipboard("System ID", val)}
-                />
-                <FieldRow
-                  label="Company ID"
-                  value={safe(meter?.companyId)}
-                  copyable={true}
-                  onCopy={(val) => copyToClipboard("Company ID", val)}
-                />
-              </div>
-            </details>
-          ) : null}
 
           <div className="grid grid-3" style={{ marginTop: 12 }}>
             {fields.map((f) => (
@@ -366,7 +322,7 @@ export function MeterDetailPage() {
               className="btn"
               to={`/meters/${encodeURIComponent(meterId)}/updates`}
             >
-              View updates / history
+              View Updates / History
             </Link>
           </div>
         </div>

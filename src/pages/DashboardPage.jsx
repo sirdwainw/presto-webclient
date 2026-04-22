@@ -14,11 +14,7 @@ function KpiTile({ label, value, hint, to }) {
     <div className="card card-subtle kpi-card">
       <div className="kpi-label">{label}</div>
       <div className="kpi-value">{value}</div>
-      {hint ? (
-        <div className="kpi-hint">{hint}</div>
-      ) : (
-        <div className="kpi-hint" />
-      )}
+      {hint ? <div className="kpi-hint">{hint}</div> : <div className="kpi-hint" />}
     </div>
   );
 
@@ -40,36 +36,30 @@ export function DashboardPage() {
   const role = user?.role;
   const nav = useNavigate();
 
-  // Superadmin: view mode
-  const [viewMode, setViewMode] = useState("admin"); // "admin" | "tech"
+  const [viewMode, setViewMode] = useState("admin");
   const isSuperadmin = role === "superadmin";
 
-  // Admin dashboard summary
   const [loadingSummary, setLoadingSummary] = useState(false);
   const [summaryError, setSummaryError] = useState(null);
   const [summary, setSummary] = useState(null);
 
-  // Tech workload snapshot (admin + superadmin)
   const [loadingWorkload, setLoadingWorkload] = useState(false);
   const [workloadError, setWorkloadError] = useState(null);
   const [workload, setWorkload] = useState(null);
 
   const techRows = useMemo(() => workload?.techs || [], [workload]);
 
-  // Superadmin: selected tech
   const [selectedTechId, setSelectedTechId] = useState("");
   const [loadingTech, setLoadingTech] = useState(false);
   const [techError, setTechError] = useState(null);
   const [techSummary, setTechSummary] = useState(null);
 
-  // If superadmin and no activeCompanyId, route to context selection
   useEffect(() => {
     if (role === "superadmin" && !user?.activeCompanyId) {
       nav("/settings", { replace: true });
     }
   }, [role, user?.activeCompanyId, nav]);
 
-  // Load admin summary (admin/superadmin)
   useEffect(() => {
     async function load() {
       if (!(role === "admin" || role === "superadmin")) return;
@@ -96,7 +86,6 @@ export function DashboardPage() {
     load();
   }, [role, nav]);
 
-  // Load tech workload (admin/superadmin)
   useEffect(() => {
     async function load() {
       if (!(role === "admin" || role === "superadmin")) return;
@@ -114,23 +103,19 @@ export function DashboardPage() {
     load();
   }, [role]);
 
-  // Superadmin: pick first tech automatically
   useEffect(() => {
     if (!isSuperadmin) return;
     if (selectedTechId) return;
     if (techRows.length > 0) setSelectedTechId(techRows[0].userId);
   }, [isSuperadmin, selectedTechId, techRows]);
 
-  // Load tech summary:
-  // - tech role: self
-  // - superadmin tech view: selected tech
   useEffect(() => {
     async function load() {
       if (role === "tech") {
         setLoadingTech(true);
         setTechError(null);
         try {
-          const data = await techSummaryApi(); // self
+          const data = await techSummaryApi();
           setTechSummary(data);
         } catch (e) {
           setTechError(e);
@@ -155,47 +140,47 @@ export function DashboardPage() {
     load();
   }, [role, isSuperadmin, viewMode, selectedTechId]);
 
-  // ===== Render =====
-
-  // TECH DASHBOARD (also reused for superadmin "view as tech")
   function renderTechDashboard() {
     return (
       <div className="stack">
         {isSuperadmin ? (
           <div className="card">
-            <div className="row space-between">
-              <div>
-                <div className="h2">Viewing as Tech (read-only)</div>
-                <div className="muted">
-                  Support mode. Counts are for the selected tech.
+            <div className="stack">
+              <div className="row space-between">
+                <div>
+                  <div className="h2">Viewing as Tech</div>
+                  <div className="muted">
+                    Read-only support mode for the selected tech.
+                  </div>
                 </div>
+                <button className="btn" onClick={() => setViewMode("admin")}>
+                  Back to Admin View
+                </button>
               </div>
-              <button className="btn" onClick={() => setViewMode("admin")}>
-                Back to Admin View
-              </button>
-            </div>
 
-            <div className="grid grid-3" style={{ marginTop: 12 }}>
-              <label className="field">
-                <div className="field-label">Select Tech</div>
-                <select
-                  className="input"
-                  value={selectedTechId}
-                  onChange={(e) => setSelectedTechId(e.target.value)}
-                  disabled={loadingWorkload || techRows.length === 0}
-                >
-                  {techRows.map((t) => (
-                    <option key={t.userId} value={t.userId}>
-                      {t.name} ({t.email})
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <div className="grid grid-2">
+                <label className="field">
+                  <div className="field-label">Select Tech</div>
+                  <select
+                    className="input"
+                    value={selectedTechId}
+                    onChange={(e) => setSelectedTechId(e.target.value)}
+                    disabled={loadingWorkload || techRows.length === 0}
+                  >
+                    {techRows.map((t) => (
+                      <option key={t.userId} value={t.userId}>
+                        {t.name} ({t.email})
+                      </option>
+                    ))}
+                  </select>
+                </label>
 
-              <div className="field">
-                <div className="field-label">Quick links</div>
-                <div className="muted">
-                  Tech pages are tech-only. This view is read-only support.
+                <div className="field">
+                  <div className="field-label">Quick note</div>
+                  <div className="muted">
+                    Tech pages remain tech-only. This view is for support and
+                    troubleshooting.
+                  </div>
                 </div>
               </div>
             </div>
@@ -203,13 +188,12 @@ export function DashboardPage() {
         ) : (
           <div className="card">
             <div className="h1">Dashboard</div>
-                     </div>
+            <div className="muted">Your field work summary and shortcuts.</div>
+          </div>
         )}
 
         <ErrorBanner error={techError} onDismiss={() => setTechError(null)} />
-        {loadingTech ? (
-          <LoadingBlock title="Loading tech dashboard..." />
-        ) : null}
+        {loadingTech ? <LoadingBlock title="Loading tech dashboard..." /> : null}
 
         {!loadingTech && techSummary ? (
           <>
@@ -241,11 +225,12 @@ export function DashboardPage() {
             </div>
 
             {!isSuperadmin ? (
-              <div className="muted" style={{ marginTop: 10 }}>
-                Tip: start with{" "}
-                <Link to="/tech/assignments">My Assignments</Link>. Use{" "}
-                <Link to="/tech/updates">My Updates</Link> to fix rejects or
-                track review status.
+              <div className="card card-subtle">
+                <div className="muted">
+                  Start with <Link to="/tech/assignments">My Assignments</Link>.
+                  Use <Link to="/tech/updates"> My Updates</Link> to fix rejected
+                  work or track review status.
+                </div>
               </div>
             ) : null}
           </>
@@ -254,7 +239,6 @@ export function DashboardPage() {
     );
   }
 
-  // ADMIN DASHBOARD
   function renderAdminDashboard() {
     const totalMeters = summary?.totals?.totalMeters ?? 0;
     const submitted = summary?.updates?.submitted ?? 0;
@@ -269,43 +253,42 @@ export function DashboardPage() {
     return (
       <div className="stack">
         <div className="card">
-          <div className="row space-between">
-            <div>
-              <div className="h1">Dashboard</div>
-              <div className="muted">
-                {isSuperadmin ? "Superadmin" : "Admin"} view{" "}
+          <div className="stack">
+            <div className="row space-between">
+              <div>
+                <div className="h1">Dashboard</div>
+                <div className="muted">
+                  {isSuperadmin ? "Superadmin" : "Admin"} view
+                </div>
               </div>
-            </div>
 
-            {isSuperadmin ? (
-              <div style={{ display: "flex", gap: 8 }}>
-                <button
-                  className={`btn ${viewMode === "admin" ? "btn-primary" : ""}`}
-                  onClick={() => setViewMode("admin")}
-                >
-                  Admin View
-                </button>
-                <button
-                  className={`btn ${viewMode === "tech" ? "btn-primary" : ""}`}
-                  onClick={() => setViewMode("tech")}
-                  disabled={techRows.length === 0}
-                >
-                  View as Tech
-                </button>
-              </div>
-            ) : null}
+              {isSuperadmin ? (
+                <div className="row">
+                  <button
+                    className={`btn ${viewMode === "admin" ? "btn-primary" : ""}`}
+                    onClick={() => setViewMode("admin")}
+                  >
+                    Admin View
+                  </button>
+                  <button
+                    className={`btn ${viewMode === "tech" ? "btn-primary" : ""}`}
+                    onClick={() => setViewMode("tech")}
+                    disabled={techRows.length === 0}
+                  >
+                    View as Tech
+                  </button>
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
 
-        <ErrorBanner
-          error={summaryError}
-          onDismiss={() => setSummaryError(null)}
-        />
+        <ErrorBanner error={summaryError} onDismiss={() => setSummaryError(null)} />
         {loadingSummary ? <LoadingBlock title="Loading dashboard..." /> : null}
 
         {!loadingSummary && summary ? (
           <>
-            <div className="grid grid-4">
+            <div className="grid grid-4 kpi-grid">
               <KpiTile
                 label="Total meters"
                 value={totalMeters}
@@ -335,23 +318,14 @@ export function DashboardPage() {
             <div className="card">
               <div className="row space-between">
                 <div>
-                  <div className="h2">Tech workload snapshot</div>
-                  <div className="muted">
-                    Helps admin spot who is backed up or needs support.
-                  </div>
+                  <div className="h2">Tech Workload</div>
+                
                 </div>
-                <Link className="btn" to="/reports">
-                  Reports
-                </Link>
+                
               </div>
 
-              <ErrorBanner
-                error={workloadError}
-                onDismiss={() => setWorkloadError(null)}
-              />
-              {loadingWorkload ? (
-                <LoadingBlock title="Loading tech workload..." />
-              ) : null}
+              <ErrorBanner error={workloadError} onDismiss={() => setWorkloadError(null)} />
+              {loadingWorkload ? <LoadingBlock title="Loading tech workload..." /> : null}
 
               {!loadingWorkload && workload ? (
                 <div className="table-wrap" style={{ marginTop: 12 }}>
@@ -388,7 +362,7 @@ export function DashboardPage() {
                                   setViewMode("tech");
                                 }}
                               >
-                                View as tech
+                                View as Tech
                               </button>
                             </td>
                           ) : null}
@@ -405,11 +379,8 @@ export function DashboardPage() {
     );
   }
 
-  // Route render based on role + superadmin view mode
   if (role === "tech") return renderTechDashboard();
-
   if (isSuperadmin && viewMode === "tech") return renderTechDashboard();
-
   if (role === "admin" || role === "superadmin") return renderAdminDashboard();
 
   return (

@@ -39,10 +39,7 @@ export function ImportHistoryDetailPage() {
   return (
     <div className="import-center">
       <div className="import-card">
-        <div
-          className="import-link-row"
-          style={{ marginTop: 0, marginBottom: 12 }}
-        >
+        <div className="import-link-row" style={{ marginTop: 0, marginBottom: 12 }}>
           <Link className="import-detail-link" to="/imports">
             ← Back to Import Center
           </Link>
@@ -53,7 +50,7 @@ export function ImportHistoryDetailPage() {
         <div className="import-summary-grid">
           <div className="import-stat">
             <div className="import-stat-label">File</div>
-            <div className="import-stat-value" style={{ fontSize: "1rem" }}>
+            <div className="import-stat-value import-small-stat">
               {log.originalFileName}
             </div>
           </div>
@@ -65,8 +62,17 @@ export function ImportHistoryDetailPage() {
           </div>
           <div className="import-stat">
             <div className="import-stat-label">Created</div>
-            <div className="import-stat-value" style={{ fontSize: "1rem" }}>
+            <div className="import-stat-value import-small-stat">
               {new Date(log.createdAt).toLocaleString()}
+            </div>
+          </div>
+          <div className="import-stat">
+            <div className="import-stat-label">Uploaded By</div>
+            <div className="import-stat-value import-small-stat">
+              {log.uploadedBy?.name || "Unknown"}
+              {log.uploadedBy?.email ? (
+                <div className="import-muted import-subtle-line">{log.uploadedBy.email}</div>
+              ) : null}
             </div>
           </div>
         </div>
@@ -77,27 +83,19 @@ export function ImportHistoryDetailPage() {
         <div className="import-summary-grid">
           <div className="import-stat">
             <div className="import-stat-label">Total Rows</div>
-            <div className="import-stat-value">
-              {log?.totals?.totalRows ?? 0}
-            </div>
+            <div className="import-stat-value">{log?.totals?.totalRows ?? 0}</div>
           </div>
           <div className="import-stat">
             <div className="import-stat-label">Valid Rows</div>
-            <div className="import-stat-value">
-              {log?.totals?.validRows ?? 0}
-            </div>
+            <div className="import-stat-value">{log?.totals?.validRows ?? 0}</div>
           </div>
           <div className="import-stat">
             <div className="import-stat-label">Invalid Rows</div>
-            <div className="import-stat-value">
-              {log?.totals?.invalidRows ?? 0}
-            </div>
+            <div className="import-stat-value">{log?.totals?.invalidRows ?? 0}</div>
           </div>
           <div className="import-stat">
             <div className="import-stat-label">Imported</div>
-            <div className="import-stat-value">
-              {log?.totals?.imported ?? 0}
-            </div>
+            <div className="import-stat-value">{log?.totals?.imported ?? 0}</div>
           </div>
           <div className="import-stat">
             <div className="import-stat-label">Updated</div>
@@ -118,9 +116,7 @@ export function ImportHistoryDetailPage() {
         <h2>Stored Row Results</h2>
 
         {!log?.rowResults?.length ? (
-          <div className="import-empty">
-            No row results were stored for this import.
-          </div>
+          <div className="import-empty">No row results were stored for this import.</div>
         ) : (
           <div className="import-table-wrap">
             <table className="import-table">
@@ -137,40 +133,26 @@ export function ImportHistoryDetailPage() {
               </thead>
               <tbody>
                 {log.rowResults.map((row) => (
-                  <tr
-                    key={`${row.rowNumber}-${row.electronicId}-${row.accountNumber}`}
-                  >
+                  <tr key={`${row.rowNumber}-${row.electronicId}-${row.accountNumber}`}>
                     <td>{row.rowNumber}</td>
-                    <td>
-                      <StatusTag value={row.status} />
-                    </td>
-                    <td>
-                      <StatusTag value={row.action} />
-                    </td>
+                    <td><StatusTag value={row.status} /></td>
+                    <td><StatusTag value={row.action} /></td>
                     <td>{row.matchedBy || "none"}</td>
                     <td>{row.electronicId || "—"}</td>
                     <td>{row.accountNumber || "—"}</td>
                     <td>
                       <div className="import-issues">
                         {row.errors?.map((msg, i) => (
-                          <div
-                            key={`e-${row.rowNumber}-${i}`}
-                            className="import-error-text"
-                          >
+                          <div key={`e-${row.rowNumber}-${i}`} className="import-error-text">
                             {msg}
                           </div>
                         ))}
                         {row.warnings?.map((msg, i) => (
-                          <div
-                            key={`w-${row.rowNumber}-${i}`}
-                            className="import-warning-text"
-                          >
+                          <div key={`w-${row.rowNumber}-${i}`} className="import-warning-text">
                             {msg}
                           </div>
                         ))}
-                        {!row.errors?.length && !row.warnings?.length
-                          ? "—"
-                          : null}
+                        {!row.errors?.length && !row.warnings?.length ? "—" : null}
                       </div>
                     </td>
                   </tr>

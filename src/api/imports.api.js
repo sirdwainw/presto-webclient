@@ -18,6 +18,8 @@ export function listImportHistoryApi(params = {}) {
   const qs = new URLSearchParams();
   if (params.page) qs.set("page", String(params.page));
   if (params.limit) qs.set("limit", String(params.limit));
+  if (params.status) qs.set("status", String(params.status));
+  if (params.fileName) qs.set("fileName", String(params.fileName));
 
   const query = qs.toString();
   return apiFetch(`/api/imports/history${query ? `?${query}` : ""}`, {

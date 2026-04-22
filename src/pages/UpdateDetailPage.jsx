@@ -1,80 +1,33 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { getUpdateApi, deleteUpdateApi } from "../api/updates.api";
+import { getUpdateApi } from "../api/updates.api";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { LoadingBlock } from "../components/LoadingBlock";
-import { SuccessBanner } from "../components/SuccessBanner";
 import { useAuth } from "../auth/AuthContext";
 import { getEntityId } from "../api/apiClient";
-import { MeterLabel } from "../components/MeterLabel";
-import { StatusBadge } from "../components/StatusBadge";
 
+function isCompanyScopeError(e) {
+  const msg = String(e?.error || e?.message || "");
+  return e?.status === 400 && msg.startsWith("No company scope selected");
+}
 
-function fmt(dt) {
+function fmtDate(dt) {
   if (!dt) return "";
   const d = new Date(dt);
   if (Number.isNaN(d.getTime())) return String(dt);
   return d.toLocaleString();
 }
 
-function safe(v) {
-  if (v === null || v === undefined) return "";
-  if (typeof v === "string") return v;
-  if (typeof v === "number" || typeof v === "boolean") return String(v);
-  try {
-    return JSON.stringify(v);
-  } catch {
-    return String(v);
-  }
-}
-
-function createdByDisplay(update) {
-  const cb = update?.createdBy;
-  if (cb?.name && cb?.email) return `${cb.name} (${cb.email})`;
-  if (cb?.name) return cb.name;
-  if (cb?.email) return cb.email;
-
-  if (typeof update?.createdByUserId === "string") {
-    return update.createdByUserId;
-  }
-
-  return getEntityId(update?.createdByUserId) || "(unknown)";
-}
-
-function getMeterIdFromUpdate(update) {
-  const midFromMeter = getEntityId(update?.meter);
-  if (midFromMeter) return midFromMeter;
-
-  if (typeof update?.meterId === "string") return update.meterId;
-  return getEntityId(update?.meterId) || "";
-}
-
-function prettyFields(fieldsChanged) {
-  const list = Array.isArray(fieldsChanged)
-    ? fieldsChanged.filter(Boolean)
-    : [];
-
-  if (!list.length) return "";
-
-  const map = {
-    latlng: "GPS",
-    locationNotes: "Notes",
-    meterSize: "Meter Size",
-    photoUrl: "Photo",
-  };
-
-  return list.map((x) => map[x] || x).join(", ");
-}
-
-function isGpsCaptured(update) {
+function FieldRow({ label, value }) {
   return (
-    update?.gpsCaptured === true ||
-    (typeof update?.latitude === "number" &&
-      typeof update?.longitude === "number")
+    <div className="card card-subtle">
+      <div className="field-label">{label}</div>
+      <div style={{ marginTop: 8, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+        {value || "—"}
+      </div>
+    </div>
   );
 }
-
-
 
 export function UpdateDetailPage() {
   const { id } = useParams();
@@ -82,149 +35,57 @@ export function UpdateDetailPage() {
   const { user } = useAuth();
   const role = user?.role;
 
-  const isSuperadmin = role === "superadmin";
-
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [payload, setPayload] = useState(null);
 
-  const [deleting, setDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState(null);
-  const [success, setSuccess] = useState("");
-
-  const update = useMemo(() => payload?.update || null, [payload]);
-  const updateId = useMemo(() => getEntityId(update) || id, [update, id]);
-
-  const meterId = useMemo(() => getMeterIdFromUpdate(update), [update]);
-  const meter = useMemo(() => update?.meter || null, [update]);
-
-  const status = useMemo(() => {
-    const s = update?.status;
-    return typeof s === "string" ? s : "(unknown)";
-  }, [update]);
-
-  const fieldsChanged = useMemo(
-    () => prettyFields(update?.fieldsChanged),
-    [update],
-  );
-
-  const gpsCaptured = useMemo(() => isGpsCaptured(update), [update]);
-
-  const meterSize = useMemo(
-    () => String(update?.meterSize || "").trim(),
-    [update],
-  );
-
-  const notes = useMemo(
-    () => String(update?.locationNotes || "").trim(),
-    [update],
-  );
-
-  const photoUrl = useMemo(
-    () => String(update?.photoUrl || "").trim(),
-    [update],
-  );
-
-  const reviewNotes = useMemo(
-    () => String(update?.reviewNotes || "").trim(),
-    [update],
-  );
-
-  const canDelete = useMemo(() => {
-    if (!update) return false;
-
-    if (role === "admin" || role === "superadmin") return true;
-    if (role === "tech") return status === "submitted";
-    return false;
-  }, [role, status, update]);
-
-  async function load() {
-    setLoading(true);
-    setError(null);
-    setSuccess("");
-    try {
-      const data = await getUpdateApi(id);
-      setPayload(data);
-    } catch (e) {
-      setError(e);
-    } finally {
-      setLoading(false);
-    }
-  }
+  const [updatePayload, setUpdatePayload] = useState(null);
 
   useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
-
-  async function onDelete() {
-    setDeleteError(null);
-    setSuccess("");
-    setDeleting(true);
-    try {
-      await deleteUpdateApi(updateId);
-      setSuccess("Update deleted.");
-
-      if (role === "admin" || role === "superadmin") {
-        nav("/review/updates");
-      } else if (meterId) {
-        nav(`/meters/${encodeURIComponent(meterId)}/updates`);
-      } else {
-        nav("/dashboard");
+    async function load() {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await getUpdateApi(id);
+        setUpdatePayload(res);
+      } catch (e) {
+        if (isCompanyScopeError(e) && role === "superadmin") {
+          nav("/settings");
+          return;
+        }
+        setError(e);
+      } finally {
+        setLoading(false);
       }
-    } catch (e) {
-      setDeleteError(e);
-    } finally {
-      setDeleting(false);
     }
-  }
+    load();
+  }, [id, role, nav]);
 
-  const internalFields = useMemo(() => {
-    if (!update) return [];
-
-    return [
-      { label: "System Update ID", value: safe(updateId) },
-      { label: "Company ID", value: safe(update?.companyId) },
-      {
-        label: "Meter ID",
-        value: safe(getEntityId(update?.meter) || update?.meterId),
-      },
-      { label: "Created By (raw)", value: safe(update?.createdByUserId) },
-      { label: "Reviewed By (raw)", value: safe(update?.reviewedByUserId) },
-    ].filter((f) => f.value !== "");
-  }, [update, updateId]);
+  const update = updatePayload?.update || updatePayload || null;
+  const meterId = update?.meterId || update?.meter?._id || "";
+  const meterLabel = useMemo(() => {
+    return (
+      update?.meter?.electronicId ||
+      update?.meter?.accountNumber ||
+      meterId ||
+      "Meter"
+    );
+  }, [update, meterId]);
 
   return (
     <div className="stack">
       <div className="card">
-        <div className="row space-between" style={{ alignItems: "flex-start" }}>
+        <div className="row space-between">
           <div>
-            <div className="h1">Update Details</div>
+            <div className="h1">Update Detail</div>
             <div className="muted">
-              Review the submitted update and its current status.
+              Review the submitted values and status for this update.
             </div>
           </div>
 
-          <div className="row" style={{ gap: 8 }}>
-            <button className="btn" onClick={() => nav(-1)}>
-              Back
-            </button>
-
+          <div className="row">
             {meterId ? (
-              <Link
-                className="btn"
-                to={`/meters/${encodeURIComponent(meterId)}`}
-              >
-                Meter
-              </Link>
-            ) : null}
-
-            {meterId ? (
-              <Link
-                className="btn"
-                to={`/meters/${encodeURIComponent(meterId)}/updates`}
-              >
-                Updates / History
+              <Link className="btn" to={`/meters/${encodeURIComponent(meterId)}/updates`}>
+                Back to Meter Updates
               </Link>
             ) : null}
           </div>
@@ -232,139 +93,50 @@ export function UpdateDetailPage() {
       </div>
 
       <ErrorBanner error={error} onDismiss={() => setError(null)} />
-      <SuccessBanner message={success} onDismiss={() => setSuccess("")} />
-      <ErrorBanner error={deleteError} onDismiss={() => setDeleteError(null)} />
-
-      {loading ? <LoadingBlock title="Loading update..." /> : null}
+      {loading ? <LoadingBlock title="Loading update detail..." /> : null}
 
       {!loading && update ? (
         <>
           <div className="card">
-            <div
-              className="row"
-              style={{ gap: 10, alignItems: "center", flexWrap: "wrap" }}
-            >
-              <StatusBadge status={status} />
-
-              <span className="muted">{fmt(update?.createdAt)}</span>
-            </div>
-
-            <div style={{ marginTop: 14 }}>
-              <div className="muted">Meter</div>
-              {meterId || meter ? (
-                <MeterLabel
-                  meter={meter}
-                  meterId={meterId}
-                  to={
-                    meterId
-                      ? `/meters/${encodeURIComponent(meterId)}`
-                      : undefined
-                  }
-                  showSystemId={false}
-                />
-              ) : (
-                <span className="muted">(none)</span>
-              )}
-            </div>
-
-            <div className="grid grid-2" style={{ marginTop: 16, gap: 12 }}>
-              <div className="muted">
-                <strong>Submitted By:</strong> {createdByDisplay(update)}
-              </div>
-
-              <div className="muted">
-                <strong>Changed:</strong> {fieldsChanged || "—"}
-              </div>
-
-              <div className="muted">
-                <strong>GPS:</strong> {gpsCaptured ? "Captured" : "No GPS"}
-              </div>
-
-              <div className="muted">
-                <strong>Meter Size:</strong> {meterSize || "—"}
-              </div>
-
-              <div className="muted">
-                <strong>Photo:</strong> {photoUrl ? "Attached" : "None"}
-              </div>
-
-              <div className="muted">
-                <strong>Reviewed:</strong> {fmt(update?.reviewedAt) || "—"}
-              </div>
-            </div>
-
-            {notes ? (
-              <div style={{ marginTop: 14 }}>
-                <div className="muted">
-                  <strong>Notes</strong>
-                </div>
-                <div style={{ marginTop: 4 }}>{notes}</div>
-              </div>
-            ) : null}
-
-            {reviewNotes ? (
-              <div style={{ marginTop: 14 }}>
-                <div className="muted">
-                  <strong>Reviewer Note</strong>
-                </div>
-                <div style={{ marginTop: 4 }}>{reviewNotes}</div>
-              </div>
-            ) : null}
-
-            {photoUrl ? (
-              <div style={{ marginTop: 14 }}>
-                <div className="muted">
-                  <strong>Photo URL</strong>
-                </div>
-                <div style={{ marginTop: 4, wordBreak: "break-all" }}>
-                  <a
-                    href={photoUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="link"
-                  >
-                    {photoUrl}
-                  </a>
-                </div>
-              </div>
-            ) : null}
-
-            <div className="row" style={{ marginTop: 16, gap: 8 }}>
-              <button className="btn" onClick={load} disabled={loading}>
-                Refresh
-              </button>
-
-              <button
-                className="btn btn-danger"
-                onClick={onDelete}
-                disabled={!canDelete || deleting}
-                title={canDelete ? "Delete this update" : "Not allowed"}
-              >
-                {deleting ? "Deleting..." : "Delete"}
-              </button>
+            <div className="h2">{meterLabel}</div>
+            <div className="muted">
+              Submitted {fmtDate(update.createdAt)} • Status {update.status || "submitted"}
             </div>
           </div>
 
-          {isSuperadmin && internalFields.length ? (
-            <details className="card">
-              <summary className="h2" style={{ cursor: "pointer" }}>
-                Debug (internal IDs)
-              </summary>
+          <div className="grid grid-2">
+            <FieldRow label="Latitude" value={update.latitude != null ? String(update.latitude) : ""} />
+            <FieldRow label="Longitude" value={update.longitude != null ? String(update.longitude) : ""} />
+            <FieldRow label="Meter Size" value={update.meterSize || ""} />
+            <FieldRow label="Photo URL" value={update.photoUrl || ""} />
+            <FieldRow label="Submitted By" value={update.submittedByEmail || update.submittedBy || ""} />
+            <FieldRow label="Reviewed At" value={fmtDate(update.reviewedAt)} />
+          </div>
 
-              <div className="muted" style={{ marginTop: 6 }}>
-                Collapsed by default to keep the page cleaner.
-              </div>
+          <FieldRow label="Location Notes" value={update.locationNotes || ""} />
 
-              <div className="grid grid-3" style={{ marginTop: 12 }}>
-                {internalFields.map((f) => (
-                  <div key={f.label}>
-                    <div className="muted">{f.label}</div>
-                    <div className="mono">{f.value}</div>
-                  </div>
-                ))}
-              </div>
-            </details>
+          {update.reviewNotes ? (
+            <FieldRow label="Review Notes" value={update.reviewNotes} />
           ) : null}
+
+          <div className="card">
+            <div className="h2">Related Links</div>
+            <div className="row" style={{ marginTop: 12 }}>
+              {meterId ? (
+                <>
+                  <Link className="btn" to={`/meters/${encodeURIComponent(meterId)}`}>
+                    Open Meter
+                  </Link>
+                  <Link
+                    className="btn"
+                    to={`/meters/${encodeURIComponent(meterId)}/updates`}
+                  >
+                    Open Meter Update Page
+                  </Link>
+                </>
+              ) : null}
+            </div>
+          </div>
         </>
       ) : null}
     </div>

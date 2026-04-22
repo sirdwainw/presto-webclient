@@ -49,26 +49,9 @@ function autoMapHeaders(headers) {
   }));
 
   const aliases = {
-    electronicId: [
-      "electronicid",
-      "electronic id",
-      "eid",
-      "meterid",
-      "meter id",
-    ],
-    accountNumber: [
-      "accountnumber",
-      "account number",
-      "acct",
-      "acctnumber",
-      "account #",
-    ],
-    meterSerialNumber: [
-      "meterserialnumber",
-      "meter serial number",
-      "serial",
-      "meter serial",
-    ],
+    electronicId: ["electronicid", "electronic id", "eid", "meterid", "meter id"],
+    accountNumber: ["accountnumber", "account number", "acct", "acctnumber", "account #"],
+    meterSerialNumber: ["meterserialnumber", "meter serial number", "serial", "meter serial"],
     customerName: ["customername", "customer name", "name"],
     address: ["address", "service address", "location address"],
     route: ["route", "route number", "route code"],
@@ -77,17 +60,12 @@ function autoMapHeaders(headers) {
     latitude: ["latitude", "lat"],
     longitude: ["longitude", "lng", "lon", "long"],
     locationNotes: ["locationnotes", "location notes", "notes"],
-    numberOfPictures: [
-      "numberofpictures",
-      "number of pictures",
-      "picture count",
-      "photo count",
-    ],
+    numberOfPictures: ["numberofpictures", "number of pictures", "picture count", "photo count"],
   };
 
   for (const field of DB_FIELDS) {
     const match = normalized.find((h) =>
-      aliases[field.key]?.includes(h.key.replace(/[_-]/g, " ")),
+      aliases[field.key]?.includes(h.key.replace(/[_-]/g, " "))
     );
     if (match) next[field.key] = match.raw;
   }
@@ -106,7 +84,7 @@ function getFailedOrSkippedRows(rows = []) {
       row.status === "invalid" ||
       row.status === "failed" ||
       row.status === "skipped" ||
-      row.action === "skip",
+      row.action === "skip"
   );
 }
 
@@ -127,6 +105,9 @@ export function ImportCenterPage() {
   const [result, setResult] = useState(null);
   const [history, setHistory] = useState([]);
 
+  const [historyStatus, setHistoryStatus] = useState("all");
+  const [historyFileName, setHistoryFileName] = useState("");
+
   const [busy, setBusy] = useState(false);
   const [historyBusy, setHistoryBusy] = useState(false);
   const [templatesBusy, setTemplatesBusy] = useState(false);
@@ -141,18 +122,23 @@ export function ImportCenterPage() {
 
   const previewProblemRows = useMemo(
     () => getFailedOrSkippedRows(preview?.rows || []),
-    [preview],
+    [preview]
   );
 
   const resultProblemRows = useMemo(
     () => getFailedOrSkippedRows(result?.rows || []),
-    [result],
+    [result]
   );
 
-  async function loadHistory() {
+  async function loadHistory(params = {}) {
     setHistoryBusy(true);
     try {
-      const res = await listImportHistoryApi({ page: 1, limit: 10 });
+      const res = await listImportHistoryApi({
+        page: 1,
+        limit: 10,
+        status: params.status ?? historyStatus,
+        fileName: params.fileName ?? historyFileName,
+      });
       setHistory(res?.logs || []);
     } catch (e) {
       console.error(e);
@@ -174,7 +160,7 @@ export function ImportCenterPage() {
   }
 
   useEffect(() => {
-    loadHistory();
+    loadHistory({ status: "all", fileName: "" });
     loadTemplates();
   }, []);
 
@@ -201,24 +187,24 @@ export function ImportCenterPage() {
       setError(e?.message || "Could not read CSV headers.");
     }
   }
-function handleSkipSavedMappings() {
-  setSelectedTemplateId("");
-  setSuccess(
-    "Skipped saved mappings. Continue with auto-map or manual mapping below.",
-  );
 
-  if (mappingSectionRef.current) {
-    mappingSectionRef.current.scrollIntoView({
-      behavior: "smooth",
-      block: "start",
-    });
+  function handleSkipSavedMappings() {
+    setSelectedTemplateId("");
+    setSuccess("Skipped saved setups. Continue with auto-match or manual column matching below.");
+
+    if (mappingSectionRef.current) {
+      mappingSectionRef.current.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }
   }
-}
+
   function handleApplyTemplate() {
     const template = templates.find((t) => t._id === selectedTemplateId);
     if (!template) return;
     setMapping(template.mapping || {});
-    setSuccess(`Loaded template "${template.name}".`);
+    setSuccess(`Loaded setup "${template.name}".`);
   }
 
   async function handleSaveTemplate() {
@@ -227,12 +213,12 @@ function handleSkipSavedMappings() {
 
     const name = String(templateName || "").trim();
     if (!name) {
-      setError("Enter a template name before saving.");
+      setError("Enter a setup name before saving.");
       return;
     }
 
     if (!mapping.electronicId && !mapping.accountNumber) {
-      setError("Map at least one identifier before saving a template.");
+      setError("Match at least one ID field before saving a setup.");
       return;
     }
 
@@ -242,11 +228,11 @@ function handleSkipSavedMappings() {
         name,
         mapping,
       });
-      setSuccess(`Template "${name}" saved.`);
+      setSuccess(`Saved setup "${name}".`);
       setTemplateName("");
       await loadTemplates();
     } catch (e) {
-      setError(e?.error || "Failed to save template.");
+      setError(e?.error || "Failed to save setup.");
     } finally {
       setBusy(false);
     }
@@ -257,27 +243,27 @@ function handleSkipSavedMappings() {
     setSuccess("");
 
     if (!selectedTemplateId) {
-      setError("Select a template to delete.");
+      setError("Select a saved setup to delete.");
       return;
     }
 
     const template = templates.find((t) => t._id === selectedTemplateId);
     if (!template) {
-      setError("Selected template was not found.");
+      setError("Selected setup was not found.");
       return;
     }
 
-    const confirmed = window.confirm(`Delete template "${template.name}"?`);
+    const confirmed = window.confirm(`Delete setup "${template.name}"?`);
     if (!confirmed) return;
 
     setBusy(true);
     try {
       await deleteImportTemplateApi(selectedTemplateId);
-      setSuccess(`Template "${template.name}" deleted.`);
+      setSuccess(`Deleted setup "${template.name}".`);
       setSelectedTemplateId("");
       await loadTemplates();
     } catch (e) {
-      setError(e?.error || "Failed to delete template.");
+      setError(e?.error || "Failed to delete setup.");
     } finally {
       setBusy(false);
     }
@@ -295,17 +281,15 @@ function handleSkipSavedMappings() {
     }
 
     if (!mapping.electronicId && !mapping.accountNumber) {
-      setError("Map at least one identifier: electronicId or accountNumber.");
+      setError("Match at least one identifier column: Electronic ID or Account Number.");
       return;
     }
 
     setBusy(true);
     try {
-      const res = await previewMeterImportApi(
-        buildFormData(file, mapping, options),
-      );
+      const res = await previewMeterImportApi(buildFormData(file, mapping, options));
       setPreview(res);
-      setSuccess("Preview generated.");
+      setSuccess("Preview ready.");
     } catch (e) {
       setError(e?.error || "Preview failed.");
     } finally {
@@ -325,9 +309,7 @@ function handleSkipSavedMappings() {
 
     setBusy(true);
     try {
-      const res = await commitMeterImportApi(
-        buildFormData(file, mapping, options),
-      );
+      const res = await commitMeterImportApi(buildFormData(file, mapping, options));
       setResult(res);
       setSuccess("Import completed.");
       await loadHistory();
@@ -338,22 +320,40 @@ function handleSkipSavedMappings() {
     }
   }
 
+  async function handleApplyHistoryFilters() {
+    await loadHistory({
+      status: historyStatus,
+      fileName: historyFileName,
+    });
+  }
+
+  async function handleResetHistoryFilters() {
+    setHistoryStatus("all");
+    setHistoryFileName("");
+    await loadHistory({
+      status: "all",
+      fileName: "",
+    });
+  }
+
   return (
     <div className="import-center">
       <div className="import-card page-header">
         <h1>Import Center</h1>
 
-        <a
-  href="/presto-import-sample.csv"
-  download
-  className="import-btn-ghost"
->
-  Download Sample CSV
-</a>
+        <div className="import-link-row">
+          <button
+            className="import-btn-ghost"
+            type="button"
+            onClick={openSampleCsvDownload}
+          >
+            Download Sample CSV
+          </button>
+        </div>
 
         <p className="import-muted">
-          Download the sample CSV to see the expected headers and test the
-          import flow before using real utility data.
+          Download the sample CSV to see the expected columns and test the import flow
+          before using real utility data.
         </p>
       </div>
 
@@ -365,8 +365,8 @@ function handleSkipSavedMappings() {
         <div className="import-card">
           <h2>1. Upload CSV</h2>
           <p className="import-muted">
-            Upload a CSV, map its columns to Presto meter fields, preview
-            changes, and import only the rows that pass validation.
+            Upload your CSV, match its columns to Presto fields, preview what will
+            happen, and import only the rows that pass validation.
           </p>
 
           <div className="import-upload-box">
@@ -394,7 +394,7 @@ function handleSkipSavedMappings() {
                   }))
                 }
               />
-              Skip blank CSV values when updating existing records
+              Ignore blank CSV values when updating existing records
             </label>
           </div>
         </div>
@@ -402,19 +402,19 @@ function handleSkipSavedMappings() {
         <div className="import-card">
           <h2>Quick notes</h2>
           <div className="import-empty">
-            New rows are safest when they include an Electronic ID. Existing
-            rows match by Electronic ID first, then Account Number. Preview
-            before import so conflicts and skipped rows are visible.
+            New rows work best when they include an Electronic ID. Existing rows
+            match by Electronic ID first, then Account Number. Preview first so
+            conflicts and skipped rows are easy to spot.
           </div>
         </div>
       </div>
 
       <div className="import-card">
-        <h2>2. Mapping presets</h2>
+        <h2>2. Saved column setups</h2>
 
         <p className="import-muted">
-          Save reusable column mappings for common source files like Encore
-          exports or legacy billing CSVs.
+          Optional: load a saved setup for common file formats, or skip this step
+          and continue with auto-match or manual matching below.
         </p>
 
         <div className="import-file-row" style={{ marginTop: 12 }}>
@@ -424,21 +424,13 @@ function handleSkipSavedMappings() {
             onChange={(e) => setSelectedTemplateId(e.target.value)}
             disabled={templatesBusy}
           >
-            <option value="">-- Select saved mapping --</option>
+            <option value="">-- Select saved setup --</option>
             {templates.map((template) => (
               <option key={template._id} value={template._id}>
                 {template.name}
               </option>
             ))}
           </select>
-          <button
-            className="import-btn-ghost"
-            type="button"
-            onClick={handleSkipSavedMappings}
-            disabled={busy}
-          >
-            Skip Saved Mappings
-          </button>
 
           <button
             className="import-btn-secondary"
@@ -446,7 +438,7 @@ function handleSkipSavedMappings() {
             onClick={handleApplyTemplate}
             disabled={!selectedTemplateId || busy}
           >
-            Load Mapping
+            Load Setup
           </button>
 
           <button
@@ -455,7 +447,16 @@ function handleSkipSavedMappings() {
             onClick={handleDeleteTemplate}
             disabled={!selectedTemplateId || busy}
           >
-            Delete Template
+            Delete Setup
+          </button>
+
+          <button
+            className="import-btn-ghost"
+            type="button"
+            onClick={handleSkipSavedMappings}
+            disabled={busy}
+          >
+            Skip Saved Setups
           </button>
         </div>
 
@@ -463,7 +464,7 @@ function handleSkipSavedMappings() {
           <input
             className="import-file-input"
             type="text"
-            placeholder="Template name (example: Encore Export)"
+            placeholder="Setup name (example: Encore Export)"
             value={templateName}
             onChange={(e) => setTemplateName(e.target.value)}
           />
@@ -474,16 +475,16 @@ function handleSkipSavedMappings() {
             onClick={handleSaveTemplate}
             disabled={busy}
           >
-            Save Current Mapping
+            Save Current Setup
           </button>
         </div>
       </div>
 
       <div className="import-card" ref={mappingSectionRef}>
-        <h2>3. Map columns</h2>
+        <h2>3. Match columns</h2>
 
         {!headers.length ? (
-          <div className="import-empty">Choose a CSV file to load headers.</div>
+          <div className="import-empty">Choose a CSV file to load its column names.</div>
         ) : (
           <div className="import-table-wrap">
             <table className="import-table">
@@ -498,9 +499,7 @@ function handleSkipSavedMappings() {
                   <tr key={field.key}>
                     <td>
                       {field.label}
-                      {field.required ? (
-                        <span className="import-muted"> *</span>
-                      ) : null}
+                      {field.required ? <span className="import-muted"> *</span> : null}
                     </td>
                     <td>
                       <select
@@ -513,11 +512,10 @@ function handleSkipSavedMappings() {
                           }))
                         }
                       >
-                        <option value="">-- Not mapped --</option>
+                        <option value="">-- Not matched --</option>
                         {headers.map((header) => {
                           const alreadyUsed =
-                            mappedHeaderSet.has(header) &&
-                            mapping[field.key] !== header;
+                            mappedHeaderSet.has(header) && mapping[field.key] !== header;
                           return (
                             <option
                               key={`${field.key}-${header}`}
@@ -544,7 +542,7 @@ function handleSkipSavedMappings() {
             onClick={() => setMapping(autoMapHeaders(headers))}
             disabled={!headers.length || busy}
           >
-            Auto-map headers
+            Auto-Match Columns
           </button>
 
           <button
@@ -574,39 +572,27 @@ function handleSkipSavedMappings() {
           <div className="import-summary-grid">
             <div className="import-stat">
               <div className="import-stat-label">Total Rows</div>
-              <div className="import-stat-value">
-                {preview?.summary?.totalRows ?? 0}
-              </div>
+              <div className="import-stat-value">{preview?.summary?.totalRows ?? 0}</div>
             </div>
             <div className="import-stat">
               <div className="import-stat-label">Valid Rows</div>
-              <div className="import-stat-value">
-                {preview?.summary?.validRows ?? 0}
-              </div>
+              <div className="import-stat-value">{preview?.summary?.validRows ?? 0}</div>
             </div>
             <div className="import-stat">
               <div className="import-stat-label">Invalid Rows</div>
-              <div className="import-stat-value">
-                {preview?.summary?.invalidRows ?? 0}
-              </div>
+              <div className="import-stat-value">{preview?.summary?.invalidRows ?? 0}</div>
             </div>
             <div className="import-stat">
               <div className="import-stat-label">Would Create</div>
-              <div className="import-stat-value">
-                {preview?.summary?.wouldCreate ?? 0}
-              </div>
+              <div className="import-stat-value">{preview?.summary?.wouldCreate ?? 0}</div>
             </div>
             <div className="import-stat">
               <div className="import-stat-label">Would Update</div>
-              <div className="import-stat-value">
-                {preview?.summary?.wouldUpdate ?? 0}
-              </div>
+              <div className="import-stat-value">{preview?.summary?.wouldUpdate ?? 0}</div>
             </div>
             <div className="import-stat">
               <div className="import-stat-label">Would Skip</div>
-              <div className="import-stat-value">
-                {preview?.summary?.wouldSkip ?? 0}
-              </div>
+              <div className="import-stat-value">{preview?.summary?.wouldSkip ?? 0}</div>
             </div>
           </div>
 
@@ -616,13 +602,10 @@ function handleSkipSavedMappings() {
               type="button"
               disabled={!previewProblemRows.length}
               onClick={() =>
-                downloadImportRowsAsCsv(
-                  "presto-preview-problem-rows.csv",
-                  previewProblemRows,
-                )
+                downloadImportRowsAsCsv("presto-preview-problem-rows.csv", previewProblemRows)
               }
             >
-              Download Preview Failed/Skipped Rows
+              Download Preview Problem Rows
             </button>
           </div>
 
@@ -643,36 +626,24 @@ function handleSkipSavedMappings() {
                 {(preview.rows || []).map((row) => (
                   <tr key={row.rowNumber}>
                     <td>{row.rowNumber}</td>
-                    <td>
-                      <StatusTag value={row.status} />
-                    </td>
-                    <td>
-                      <StatusTag value={row.action} />
-                    </td>
+                    <td><StatusTag value={row.status} /></td>
+                    <td><StatusTag value={row.action} /></td>
                     <td>{row.matchedBy || "none"}</td>
                     <td>{row.electronicId || "—"}</td>
                     <td>{row.accountNumber || "—"}</td>
                     <td>
                       <div className="import-issues">
                         {row.errors?.map((msg, i) => (
-                          <div
-                            key={`e-${row.rowNumber}-${i}`}
-                            className="import-error-text"
-                          >
+                          <div key={`e-${row.rowNumber}-${i}`} className="import-error-text">
                             {msg}
                           </div>
                         ))}
                         {row.warnings?.map((msg, i) => (
-                          <div
-                            key={`w-${row.rowNumber}-${i}`}
-                            className="import-warning-text"
-                          >
+                          <div key={`w-${row.rowNumber}-${i}`} className="import-warning-text">
                             {msg}
                           </div>
                         ))}
-                        {!row.errors?.length && !row.warnings?.length
-                          ? "—"
-                          : null}
+                        {!row.errors?.length && !row.warnings?.length ? "—" : null}
                       </div>
                     </td>
                   </tr>
@@ -690,33 +661,23 @@ function handleSkipSavedMappings() {
           <div className="import-summary-grid">
             <div className="import-stat">
               <div className="import-stat-label">Total Rows</div>
-              <div className="import-stat-value">
-                {result?.summary?.totalRows ?? 0}
-              </div>
+              <div className="import-stat-value">{result?.summary?.totalRows ?? 0}</div>
             </div>
             <div className="import-stat">
               <div className="import-stat-label">Imported</div>
-              <div className="import-stat-value">
-                {result?.summary?.imported ?? 0}
-              </div>
+              <div className="import-stat-value">{result?.summary?.imported ?? 0}</div>
             </div>
             <div className="import-stat">
               <div className="import-stat-label">Updated</div>
-              <div className="import-stat-value">
-                {result?.summary?.updated ?? 0}
-              </div>
+              <div className="import-stat-value">{result?.summary?.updated ?? 0}</div>
             </div>
             <div className="import-stat">
               <div className="import-stat-label">Skipped</div>
-              <div className="import-stat-value">
-                {result?.summary?.skipped ?? 0}
-              </div>
+              <div className="import-stat-value">{result?.summary?.skipped ?? 0}</div>
             </div>
             <div className="import-stat">
               <div className="import-stat-label">Failed</div>
-              <div className="import-stat-value">
-                {result?.summary?.failed ?? 0}
-              </div>
+              <div className="import-stat-value">{result?.summary?.failed ?? 0}</div>
             </div>
           </div>
 
@@ -726,20 +687,14 @@ function handleSkipSavedMappings() {
               type="button"
               disabled={!resultProblemRows.length}
               onClick={() =>
-                downloadImportRowsAsCsv(
-                  "presto-import-problem-rows.csv",
-                  resultProblemRows,
-                )
+                downloadImportRowsAsCsv("presto-import-problem-rows.csv", resultProblemRows)
               }
             >
-              Download Import Failed/Skipped Rows
+              Download Import Problem Rows
             </button>
 
             {result?.importLogId ? (
-              <Link
-                className="import-detail-link"
-                to={`/imports/history/${result.importLogId}`}
-              >
+              <Link className="import-detail-link" to={`/imports/history/${result.importLogId}`}>
                 View saved import detail
               </Link>
             ) : null}
@@ -750,10 +705,57 @@ function handleSkipSavedMappings() {
       <div className="import-card">
         <h2>Recent Import History</h2>
 
+        <div className="import-history-filters">
+          <div className="import-filter-group">
+            <label className="import-filter-label">Status</label>
+            <select
+              className="import-select"
+              value={historyStatus}
+              onChange={(e) => setHistoryStatus(e.target.value)}
+            >
+              <option value="all">All</option>
+              <option value="previewed">Previewed</option>
+              <option value="completed">Completed</option>
+              <option value="failed">Failed</option>
+            </select>
+          </div>
+
+          <div className="import-filter-group import-filter-grow">
+            <label className="import-filter-label">File name</label>
+            <input
+              className="import-file-input"
+              type="text"
+              placeholder="Search by file name"
+              value={historyFileName}
+              onChange={(e) => setHistoryFileName(e.target.value)}
+            />
+          </div>
+
+          <div className="import-filter-actions">
+            <button
+              className="import-btn-secondary"
+              type="button"
+              onClick={handleApplyHistoryFilters}
+              disabled={historyBusy}
+            >
+              Apply Filters
+            </button>
+
+            <button
+              className="import-btn-ghost"
+              type="button"
+              onClick={handleResetHistoryFilters}
+              disabled={historyBusy}
+            >
+              Reset
+            </button>
+          </div>
+        </div>
+
         {historyBusy ? (
           <LoadingBlock label="Loading history…" />
         ) : !history.length ? (
-          <div className="import-empty">No imports yet.</div>
+          <div className="import-empty">No imports found for the current filters.</div>
         ) : (
           <div className="import-table-wrap">
             <table className="import-table">
@@ -762,6 +764,7 @@ function handleSkipSavedMappings() {
                   <th>When</th>
                   <th>File</th>
                   <th>Status</th>
+                  <th>Uploaded By</th>
                   <th>Total</th>
                   <th>Imported</th>
                   <th>Updated</th>
@@ -775,8 +778,14 @@ function handleSkipSavedMappings() {
                   <tr key={log._id}>
                     <td>{new Date(log.createdAt).toLocaleString()}</td>
                     <td>{log.originalFileName}</td>
+                    <td><StatusTag value={log.status} /></td>
                     <td>
-                      <StatusTag value={log.status} />
+                      {log.uploadedBy?.name || "Unknown"}
+                      {log.uploadedBy?.email ? (
+                        <div className="import-muted import-subtle-line">
+                          {log.uploadedBy.email}
+                        </div>
+                      ) : null}
                     </td>
                     <td>{log?.totals?.totalRows ?? 0}</td>
                     <td>{log?.totals?.imported ?? 0}</td>
@@ -784,10 +793,7 @@ function handleSkipSavedMappings() {
                     <td>{log?.totals?.skipped ?? 0}</td>
                     <td>{log?.totals?.failed ?? 0}</td>
                     <td>
-                      <Link
-                        className="import-detail-link"
-                        to={`/imports/history/${log._id}`}
-                      >
+                      <Link className="import-detail-link" to={`/imports/history/${log._id}`}>
                         Detail
                       </Link>
                     </td>
@@ -799,7 +805,7 @@ function handleSkipSavedMappings() {
         )}
       </div>
 
-      {templatesBusy ? <LoadingBlock label="Loading mapping presets…" /> : null}
+      {templatesBusy ? <LoadingBlock label="Loading saved setups…" /> : null}
     </div>
   );
 }

@@ -44,77 +44,92 @@ export function RegisterPage() {
   return (
     <div className="page-center">
       <div className="card card-narrow">
-        <div className="h1">Register</div>
-        <p className="muted">Create an account.</p>
-
-        <ErrorBanner error={error} onDismiss={() => setError(null)} />
-
-        <form onSubmit={onSubmit} className="stack">
-          <FormField label="Name">
-            <input
-              className="input"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-              disabled={loading}
-            />
-          </FormField>
-
-          <FormField label="Email">
-            <input
-              className="input"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              type="email"
-              required
-              disabled={loading}
-            />
-          </FormField>
-
-          <FormField label="Password">
-            <input
-              className="input"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              type="password"
-              required
-              disabled={loading}
-            />
-          </FormField>
-
-          <FormField
-            label="Role"
-            hint="Allowed roles per contract: tech, admin, superadmin"
-          >
-            <select
-              className="input"
-              value={role}
-              onChange={(e) => setRole(e.target.value)}
-              disabled={loading}
-            >
-              <option value="tech">tech</option>
-              <option value="admin">admin</option>
-              <option value="superadmin">superadmin</option>
-            </select>
-          </FormField>
-
-          <FormField label="Company ID (optional)" hint="You can set later">
-            <input
-              className="input"
-              value={companyId}
-              onChange={(e) => setCompanyId(e.target.value)}
-              disabled={loading}
-            />
-          </FormField>
-
-          <button className="btn btn-primary" type="submit" disabled={loading}>
-            {loading ? "Creating..." : "Create account"}
-          </button>
-
-          <div className="muted">
-            Already have an account? <Link to="/login">Login</Link>
+        <div className="stack">
+          <div>
+            <div className="h1">Create account</div>
+            <p className="muted" style={{ marginTop: 8, marginBottom: 0 }}>
+              Set up a Presto account and choose the role/company details needed
+              for your environment.
+            </p>
           </div>
-        </form>
+
+          <ErrorBanner error={error} onDismiss={() => setError(null)} />
+
+          <form onSubmit={onSubmit} className="stack">
+            <FormField label="Name">
+              <input
+                className="input"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                disabled={loading}
+              />
+            </FormField>
+
+            <FormField label="Email">
+              <input
+                className="input"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                type="email"
+                required
+                disabled={loading}
+              />
+            </FormField>
+
+            <FormField label="Password">
+              <input
+                className="input"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                type="password"
+                required
+                disabled={loading}
+              />
+            </FormField>
+
+            <div className="grid grid-2">
+              <FormField
+                label="Role"
+                hint="Allowed roles: tech, admin, superadmin"
+              >
+                <select
+                  className="input"
+                  value={role}
+                  onChange={(e) => setRole(e.target.value)}
+                  disabled={loading}
+                >
+                  <option value="tech">tech</option>
+                  <option value="admin">admin</option>
+                  <option value="superadmin">superadmin</option>
+                </select>
+              </FormField>
+
+              <FormField label="Company ID (optional)" hint="You can set this later">
+                <input
+                  className="input"
+                  value={companyId}
+                  onChange={(e) => setCompanyId(e.target.value)}
+                  disabled={loading}
+                />
+              </FormField>
+            </div>
+
+            <div className="row">
+              <button
+                className="btn btn-primary"
+                type="submit"
+                disabled={loading}
+              >
+                {loading ? "Creating..." : "Create Account"}
+              </button>
+            </div>
+
+            <div className="muted">
+              Already have an account? <Link to="/login">Sign in</Link>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
   );
